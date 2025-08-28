@@ -126,3 +126,19 @@ public final class Main {
     private static final class LineTooLongException extends IOException {
     }
 }
+
+/*
+ * Commands to test
+ * 
+ * # Valid request line
+ * printf 'GET /hello/world HTTP/1.1\r\n\r\n' | nc localhost 8080
+ * 
+ * # Bad version
+ * printf 'GET / HTTP/1.0\r\n\r\n' | nc localhost 8080
+ * 
+ * # Malformed line (missing parts)
+ * printf 'GET /\r\n\r\n' | nc localhost 8080
+ * 
+ * # Bad target
+ * printf 'GET notstartingwithslash HTTP/1.1\r\n\r\n' | nc localhost 8080
+ */
