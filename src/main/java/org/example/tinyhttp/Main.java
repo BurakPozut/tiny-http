@@ -8,6 +8,15 @@ import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+
+import org.example.tinyhttp.HttpExceptions.*;
+// import org.example.tinyhttp.HttpExceptions.BadRequest;
+// import org.example.tinyhttp.HttpExceptions.HeaderTooLarge;
+// import org.example.tinyhttp.HttpExceptions.HttpVersionNotSupported;
+// import org.example.tinyhttp.HttpExceptions.LineTooLong;
+// import org.example.tinyhttp.HttpExceptions.NotImplemented;
+import static org.example.tinyhttp.HttpResponses.writeText;
 
 public final class Main {
     private static final int PORT = 8080;
@@ -15,6 +24,9 @@ public final class Main {
     // Safety limits
     private static final int MAX_REQUEST_LINE_BYTES = 8192; // 8KB
     private static final int MAX_TARGET_LENGTH = 4096; // 8KB
+    private static final int MAX_HEADER_COUNT = 100; // prevent header bombs
+    private static final int MAX_HEADER_LINE_BYTES = 8192; // 8KB per header line
+    private static final int MAX_HEADERS_TOTAL_BYTES = 65536; // 64KB across all header lines
 
     private Main() {
     }
@@ -46,45 +58,94 @@ public final class Main {
         OutputStream out = client.getOutputStream();
         BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.US_ASCII));
 
-        String requestLine = readRequestLine(reader);
-        if (requestLine == null || requestLine.isEmpty()) {
-            writeText(out, 400, "Bad Request", "Empty Request Line\n");
-            return;
+        try {
+
+            String requestLine = readRequestLine(reader);
+            if (requestLine == null || requestLine.isEmpty()) {
+                writeText(out, 400, "Bad Request", "Empty Request Line\n");
+                return;
+            }
+
+            // Split into METHOD, TARGET, VERSION
+            String[] parts = requestLine.split(" ", 3);
+            if (parts.length != 3) {
+                writeText(out, 400, "Bad Request", "Malformed Request Line\n");
+                return;
+            }
+
+            String method = parts[0];
+            String target = parts[1];
+            String version = parts[2];
+
+            // Version Check
+            if (!"HTTP/1.1".equals(version)) {
+                throw new HttpVersionNotSupported("Only HTTP/1.1 supported");
+            }
+
+            // Verify basic target sanity (we’ll do real URL parsing later)
+            if (target.isEmpty() || !target.startsWith("/")) {
+                throw new BadRequest("Target must start with '/'");
+            }
+
+            if (target.length() > MAX_TARGET_LENGTH) {
+                throw new HeaderTooLarge("Target too long");
+            }
+
+            // --- 2 ) Headers
+            HttpHeaders headers = readHeaders(reader);
+
+            // ---- 3) HTTP/1.1 requires Host ----
+            List<String> hosts = headers.all("host");
+            // List<String> hosts = headers.getOrDefault("host", Collections.emptyList());
+            if (hosts.isEmpty())
+                throw new BadRequest("Missing Host header");
+            boolean allSame = hosts.stream().allMatch(h -> h.equals(hosts.get(0)));
+
+            if (!allSame)
+                throw new BadRequest("Multiple differing Host headers");
+
+            // ---- 4) Pre-parse body semantics (do NOT read body yet) ----
+            String cl = headers.first("content-length");
+            String te = headers.first("transfer-encoding");
+
+            if (cl != null && te != null)
+                throw new BadRequest("Content-Length and Transfer-Encoding both present");
+
+            if (te != null && !te.equalsIgnoreCase("identity"))
+                throw new NotImplemented("Transfer-Encoding not implemented");
+
+            Long contentLength = null;
+            if (cl != null) {
+                try {
+                    contentLength = Long.parseLong(cl);
+                    if (contentLength < 0 || contentLength > 10_000_000L)
+                        throw new BadRequest("Invalid Content-Length");
+                } catch (NumberFormatException e) {
+                    throw new BadRequest("Invalid Content-Length");
+                }
+            }
+
+            // ---- 5) response: echo basics + some headers ----
+            String body = ""
+                    + "Method: " + method + "\n"
+                    + "Target: " + target + "\n"
+                    + "Version: " + version + "\n"
+                    + "Host: " + (hosts.isEmpty() ? "-> none" : hosts.get(0)) + "\n"
+                    + "User-Agent: " + (headers.first("user-agent", "-> none")) + "\n"
+                    + "Content-Length (req): " + (contentLength == null ? "-> none" : contentLength) + "\n";
+
+            writeText(out, 200, "OK", body);
+        } catch (BadRequest e) {
+            writeText(out, 400, "Bad Request", e.getMessage() + "\n");
+        } catch (HeaderTooLarge e) {
+            writeText(out, 431, "Request Header Fields Too Large", e.getMessage() + "\n");
+        } catch (NotImplemented e) {
+            writeText(out, 501, "Not Implemented", e.getMessage() + "\n");
+        } catch (HttpVersionNotSupported e) {
+            writeText(out, 505, "HTTP Version Not Supported", e.getMessage() + "\n");
+        } catch (LineTooLong e) {
+            writeText(out, 430, "", e.getMessage() + "\n");
         }
-
-        // Split into METHOD, TARGET, VERSION
-        String[] parts = requestLine.split(" ", 3);
-        if (parts.length != 3) {
-            writeText(out, 400, "Bad Request", "Malformed Request Line\n");
-            return;
-        }
-
-        String method = parts[0];
-        String target = parts[1];
-        String version = parts[2];
-
-        // Version Check
-        if (!"HTTP/1.1".equals(version)) {
-            writeText(out, 505, "HTTP Versoin Not Supported", "Only HTTP/1.1 supported\n");
-            return;
-        }
-
-        // Verify basic target sanity (we’ll do real URL parsing later)
-        if (target.isEmpty() || !target.startsWith("/")) {
-            writeText(out, 400, "Bad Request", "Target must start with '/'\n");
-            return;
-        }
-
-        if (target.length() > MAX_TARGET_LENGTH) {
-            writeText(out, 414, "URI Too Long", "Target too long\n");
-            return;
-        }
-
-        // For step 2 we ignore the headers/body. Just echo the target back
-        String body = "Method: " + method + "\n" +
-                "Target: " + target + "\n" +
-                "Version" + version + "\n";
-        writeText(out, 200, "OK", body);
 
     }
 
@@ -103,42 +164,76 @@ public final class Main {
         if (line.getBytes(StandardCharsets.US_ASCII).length > MAX_REQUEST_LINE_BYTES) {
             // reset so we can still write a response, then consume and close
             reader.reset();
-            throw new LineTooLongException();
+            throw new LineTooLong("Requst Line Too Long");
         }
 
         return line;
     }
 
-    private static void writeText(OutputStream out, int status, String reason, String text) throws IOException {
-        byte[] body = text.getBytes(StandardCharsets.UTF_8);
-        String headers = "HTTP/1.1 " + status + " " + reason + "\r\n" +
-                "Content-Type: text/plain; charset=utf-8\r\n" +
-                "Content-Length: " + body.length + "\r\n" +
-                "Connection: close\r\n" +
-                "\r\n";
+    private static HttpHeaders readHeaders(BufferedReader reader) throws IOException {
+        HttpHeaders headers = new HttpHeaders();
+        int totalBytes = 0, count = 0;
 
-        out.write(headers.getBytes(StandardCharsets.US_ASCII));
-        out.write(body);
-        out.flush();
+        while (true) {
+            String line = reader.readLine();
+            if (line == null)
+                throw new BadRequest("Unexpected end of headers");
+            if (line.isEmpty())
+                break;
+
+            int lineBytes = HttpHeaders.asciiLenWithCrlf(line);
+            if (lineBytes > MAX_HEADER_LINE_BYTES)
+                throw new HeaderTooLarge("Header line too large");
+            totalBytes += lineBytes;
+            if (totalBytes > MAX_HEADERS_TOTAL_BYTES)
+                throw new HeaderTooLarge("Headers too large");
+            if (++count > MAX_HEADER_COUNT)
+                throw new HeaderTooLarge("Too many header fields");
+
+            if (line.charAt(0) == ' ' || line.charAt(0) == '\t')
+                throw new BadRequest("Obsolete header folding not allowed");
+
+            int colon = line.indexOf(':');
+            if (colon <= 0)
+                throw new BadRequest("Malformed header (missing colon)");
+
+            String name = line.substring(0, colon).trim();
+            String value = line.substring(colon + 1).trim();
+            if (name.isEmpty())
+                throw new BadRequest("Empty header name");
+
+            headers.add(name, value);
+        }
+        return headers;
     }
 
     // Minimal cheked exception to signal an overlong request line.
-    private static final class LineTooLongException extends IOException {
-    }
+    // private static final class LineTooLongException extends IOException {
+    // }
 }
 
 /*
  * Commands to test
  * 
- * # Valid request line
- * printf 'GET /hello/world HTTP/1.1\r\n\r\n' | nc localhost 8080
+ * # Valid GET (HTTP/1.1 requires Host)
+ * printf 'GET /hello HTTP/1.1\r\nHost: localhost\r\n\r\n' | nc localhost 8080
  * 
- * # Bad version
- * printf 'GET / HTTP/1.0\r\n\r\n' | nc localhost 8080
+ * # Missing Host -> 400
+ * printf 'GET /hello HTTP/1.1\r\n\r\n' | nc localhost 8080
  * 
- * # Malformed line (missing parts)
- * printf 'GET /\r\n\r\n' | nc localhost 8080
+ * # Multiple Host different -> 400
+ * printf 'GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n' | nc localhost 8080
  * 
- * # Bad target
- * printf 'GET notstartingwithslash HTTP/1.1\r\n\r\n' | nc localhost 8080
+ * # Header too large -> 431
+ * python3 - <<'PY' | nc localhost 8080
+ * print("GET / HTTP/1.1\r\nHost: x\r\nX-Big: " + "a"*9000 + "\r\n\r\n")
+ * PY
+ * 
+ * # Transfer-Encoding (not implemented yet) -> 501
+ * printf 'POST / HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n' |
+ * nc localhost 8080
+ * 
+ * # With Content-Length (we ignore body for now)
+ * printf 'POST /echo HTTP/1.1\r\nHost: x\r\nContent-Length: 5\r\n\r\nhello' |
+ * nc localhost 8080
  */
