@@ -11,11 +11,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import org.example.tinyhttp.HttpExceptions.*;
-// import org.example.tinyhttp.HttpExceptions.BadRequest;
-// import org.example.tinyhttp.HttpExceptions.HeaderTooLarge;
-// import org.example.tinyhttp.HttpExceptions.HttpVersionNotSupported;
-// import org.example.tinyhttp.HttpExceptions.LineTooLong;
-// import org.example.tinyhttp.HttpExceptions.NotImplemented;
+import org.example.tinyhttp.HttpExceptions.BadRequest;
+import org.example.tinyhttp.HttpExceptions.HeaderTooLarge;
+import org.example.tinyhttp.HttpExceptions.HttpVersionNotSupported;
+import org.example.tinyhttp.HttpExceptions.LineTooLong;
+import org.example.tinyhttp.HttpExceptions.NotImplemented;
 import static org.example.tinyhttp.HttpResponses.writeText;
 
 public final class Main {
@@ -27,6 +27,7 @@ public final class Main {
     private static final int MAX_HEADER_COUNT = 100; // prevent header bombs
     private static final int MAX_HEADER_LINE_BYTES = 8192; // 8KB per header line
     private static final int MAX_HEADERS_TOTAL_BYTES = 65536; // 64KB across all header lines
+    private static final long MAX_BODY_BYTES = 1_000_000L; // 1 MB safety cap
 
     private Main() {
     }
@@ -125,8 +126,12 @@ public final class Main {
                 }
             }
 
+            byte[] body = new byte[0];
+            if(contentLength != null && contentLength > 0)
+                body = readFixedBytes(in, contentLength);
+
             // ---- 5) response: echo basics + some headers ----
-            String body = ""
+            String response_body = ""
                     + "Method: " + method + "\n"
                     + "Target: " + target + "\n"
                     + "Version: " + version + "\n"
@@ -134,7 +139,7 @@ public final class Main {
                     + "User-Agent: " + (headers.first("user-agent", "-> none")) + "\n"
                     + "Content-Length (req): " + (contentLength == null ? "-> none" : contentLength) + "\n";
 
-            writeText(out, 200, "OK", body);
+            writeText(out, 200, "OK", response_body);
         } catch (BadRequest e) {
             writeText(out, 400, "Bad Request", e.getMessage() + "\n");
         } catch (HeaderTooLarge e) {
@@ -207,9 +212,18 @@ public final class Main {
         return headers;
     }
 
-    // Minimal cheked exception to signal an overlong request line.
-    // private static final class LineTooLongException extends IOException {
-    // }
+    private static byte[] readFixedBytes(InputStream in, long length) throws
+    IOException, BadRequest{
+        if(length > Integer.MAX_VALUE)
+            throw new BadRequest("Body too large");
+
+        int toRead = (int) length;
+        byte[] buff = in.readNBytes(toRead);
+        // Client closed early
+        if(buff.length != toRead)
+            throw new BadRequest("Incoplete Request Body");
+        return buff;
+    }
 }
 
 /*
