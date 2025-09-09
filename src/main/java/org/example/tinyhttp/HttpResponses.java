@@ -19,4 +19,20 @@ public final class HttpResponses {
     out.write(body);
     out.flush();
   }
+
+  public static void writeRaw(OutputStream out, int status, String reason, String contentType, byte[] body) throws IOException {
+    if(body == null) body = new byte[0];
+
+    String headers = 
+    "HTTP/1.1 " + status + " " + reason + "\r\n" +
+    "Content-Type: " + contentType + "\r\n" +
+    "Content-Length: " + body.length + "\r\n" +
+    "Connection: close\r\n" +
+    "\r\n";
+    
+    out.write(headers.getBytes(StandardCharsets.US_ASCII));
+    out.write(body);
+    out.flush();
+      
+  }
 }
