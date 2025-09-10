@@ -99,7 +99,7 @@ public final class HttpRequest {
     // 5. Read body
     byte[] body = new byte[0];
     if (contentLength != null && contentLength > 0) {
-        body = readFixedBytes(in, contentLength);
+      body = readFixedBytes(in, contentLength);
     }
     return new HttpRequest(method, target, version, headers, body);
 

@@ -14,9 +14,10 @@ public final class HttpParser {
 
       while((b = in.read()) != -1){
           if(++read > maxBytes) throw new HttpExceptions.LineTooLong("line too long");
-          if(prev == '\r' && b == '\n') {
+          if((prev == '\r' && b == '\n') || b == '\n') {
               byte[] arr = buf.toByteArray();
-              return new String(arr, 0, arr.length - 1, StandardCharsets.US_ASCII);
+              int length = (prev == '\r' && b == '\n') ? arr.length - 1 : arr.length;
+              return new String(arr, 0, length, StandardCharsets.US_ASCII);
           }
 
           buf.write(b);
