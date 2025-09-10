@@ -8,11 +8,11 @@ import org.example.tinyhttp.HttpResponses;
 public class GetRoutes {
   private GetRoutes() {}
     
-    public static void handle(String target, OutputStream out) throws IOException {
+    public static void handle(String target, OutputStream out, boolean keepAlive) throws IOException {
         if ("/hello".equals(target)) {
-            HttpResponses.writeText(out, 200, "OK", "hello world\n");
+            HttpResponses.writeText(out, 200, "OK", "hello world\n", keepAlive);
         } else {
-          HttpResponses.writeText(out, 404, "Not Found", "No Route: " + target + "\n");
+          HttpResponses.writeText(out, 404, "Not Found", "No Route: " + target + "\n", keepAlive);
         }
     }
 }

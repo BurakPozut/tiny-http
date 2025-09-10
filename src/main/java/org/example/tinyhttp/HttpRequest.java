@@ -40,6 +40,7 @@ public final class HttpRequest {
   public static HttpRequest parse(BufferedInputStream in) throws IOException {
     // Read Request Line
     String requestLine = readLineCRLF(in, MAX_REQUEST_LINE_BYTES);
+    
     if(requestLine == null || requestLine.isEmpty())
       throw new HttpExceptions.BadRequest("Empty Request Line");
     

@@ -6,14 +6,13 @@ import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-
-// import javax.imageio.IIOException;
 
 import org.example.tinyhttp.HttpExceptions.BadRequest;
 import org.example.tinyhttp.HttpExceptions.HeaderTooLarge;
@@ -32,8 +31,10 @@ public final class Main {
     private static final int QUEUE_CAPACITY         = 256; // backpressure; reject beyond this
     private static final int SOCKET_READ_TIMEOUT_MS = 10_000; // per-connection read timeout
 
-    private Main() {
-    }
+    public static final int KEEP_ALIVE_IDLE_TIMEOUT_MS = 5000;  // idle gap between requests
+    public static final int MAX_REQUESTS_PER_CONN      = 100;   // safety cap
+
+    private Main() {}
 
     private static volatile boolean running = true;
 
@@ -107,28 +108,61 @@ public final class Main {
         try(client) {
             OutputStream out = client.getOutputStream();
             BufferedInputStream bufferedIn = new BufferedInputStream(client.getInputStream());
-            try {
-                HttpRequest request = HttpRequest.parse(bufferedIn);
-                switch (request.getMethod()) {
-                    case "GET" -> GetRoutes.handle(request.getTarget(), out);
-                    case "POST" -> PostRoutes.handle(request.getTarget(), out, request.getHeaders(), request.getBody());
-                    default -> throw new AssertionError();
+
+            int served = 0;
+            boolean keepAlive = true;
+
+            client.setSoTimeout(KEEP_ALIVE_IDLE_TIMEOUT_MS);
+
+            while(keepAlive && served < MAX_REQUESTS_PER_CONN){
+                keepAlive = false; // Start pessimistic, set to true only on success
+
+                try {
+                    HttpRequest request = HttpRequest.parse(bufferedIn);
+                    served++;
+
+                    // Expect: 100-continue (ack before reading body if your parser defers body)
+                    String expect = request.getHeaders().first("expect");
+                    if(expect != null && expect.equalsIgnoreCase("100-continue")){
+                        out.write("HTTP/1.1 100 Continue\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
+                        out.flush();
+                    }
+
+                    // Decide connection semantics for THIS response
+                    String connHeader = request.getHeaders().first("connection");
+                    boolean clientWantsClose = connHeader != null && connHeader.equalsIgnoreCase("close");
+                    boolean serverWantsClose = false;
+
+                    boolean keepThisResponseAlive = !clientWantsClose && !serverWantsClose && (served < MAX_REQUESTS_PER_CONN);
+
+
+                    switch (request.getMethod()) {
+                        case "GET" -> GetRoutes.handle(request.getTarget(), out, keepThisResponseAlive);
+                        case "POST" -> PostRoutes.handle(request.getTarget(), out, request.getHeaders(), request.getBody(), keepThisResponseAlive);
+                        default -> {
+                            // 405 and close
+                            HttpResponses.writeText(out, 405, "Method Not Allowed", "Only GET/POST supported\n", false);
+                            keepThisResponseAlive = false;
+                        }
+                    }
+                    // Next iteration: keep the loop only if we kept this response alive
+                    keepAlive = keepThisResponseAlive;
+                } catch (BadRequest e) {
+                    HttpErrorHandler.sendBadRequest(client, e.getMessage());
+                } catch (HeaderTooLarge e) {
+                    HttpErrorHandler.sendHeaderTooLarge(client, e.getMessage());
+                } catch (NotImplemented e) {
+                    HttpErrorHandler.sendNotImplemented(client, e.getMessage());
+                } catch (HttpVersionNotSupported e) {
+                    HttpErrorHandler.sendHttpVersionNotSupported(client, e.getMessage());
+                } catch (LineTooLong e) {
+                    HttpErrorHandler.sendLineTooLong(client, e.getMessage());
+                } catch (IOException ioe) {
+                    System.err.println("[tiny-http] io error: " + ioe.getMessage());
+                    // best-effort error response only if stream still usable (optional)
+                } catch(Exception e){
+                    HttpErrorHandler.sendInternalServerError(client, "oops");
                 }
-            } catch (BadRequest e) {
-                HttpErrorHandler.sendBadRequest(client, e.getMessage());
-            } catch (HeaderTooLarge e) {
-                HttpErrorHandler.sendHeaderTooLarge(client, e.getMessage());
-            } catch (NotImplemented e) {
-                HttpErrorHandler.sendNotImplemented(client, e.getMessage());
-            } catch (HttpVersionNotSupported e) {
-                HttpErrorHandler.sendHttpVersionNotSupported(client, e.getMessage());
-            } catch (LineTooLong e) {
-                HttpErrorHandler.sendLineTooLong(client, e.getMessage());
-            } catch (IOException ioe) {
-                System.err.println("[tiny-http] io error: " + ioe.getMessage());
-                // best-effort error response only if stream still usable (optional)
-            } catch(Exception e){
-                HttpErrorHandler.sendInternalServerError(client, "oops");
             }
         } catch(IOException e){
             // Socket-level errors (connection issues, etc.)

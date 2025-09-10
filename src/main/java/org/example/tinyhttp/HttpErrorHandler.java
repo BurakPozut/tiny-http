@@ -8,9 +8,14 @@ public final class HttpErrorHandler {
 
   public static void sendErrorResponse(Socket client, int status, String reason, String message){
     try {
-      HttpResponses.writeText(client.getOutputStream(), status, reason, message + '\n');
+      if (client.isClosed() || client.isOutputShutdown()) {
+        System.err.println("[DEBUG] Socket closed, skipping error response");
+        return;
+      }
+      HttpResponses.writeText(client.getOutputStream(), status, reason, message, false);
     } catch (IOException ignored) {
       System.err.println("[DEBUG] IOException in sendErrorResponse: " + ignored.getMessage());
+      // ignored.printStackTrace();
     }
   }
 
