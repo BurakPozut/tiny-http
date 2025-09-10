@@ -172,69 +172,16 @@ public final class Main {
 }
 
 /*
- * Commands to test
+ * STEP 6: keep-alive handling
  * 
- * BASIC TESTS:
- * # GET /hello
+ * 
+ * Test keep-alive functionality:
+ * # Single connection with multiple requests
+ * printf 'GET /hello HTTP/1.1\r\nHost: x\r\n\r\nGET /hello HTTP/1.1\r\nHost: x\r\n\r\n' | nc localhost 8080
+ * 
+ * # Test with curl (easier to read)
  * curl http://localhost:8080/hello
  * 
- * # POST /echo with small text
- * curl -X POST http://localhost:8080/echo -H "Content-Type: text/plain" -d "hello"
- * 
- * # Test with netcat
- * printf 'GET /hello HTTP/1.1\r\nHost: x\r\n\r\n' | nc -w 1 localhost 8080
- * 
- * STRESS TESTS (to see backpressure in action):
- * 
- * # 1. Reduce server capacity first:
- * #    - Set WORKER_THREADS = 1
- *    - Set QUEUE_CAPACITY = 2
- *    - Set ACCEPT_BACKLOG = 1
- * 
- * # 2. Send requests faster than server can handle:
- * for i in {1..50}; do curl -s http://localhost:8080/hello & done; wait
- * 
- * # 3. Use Apache Bench (if available):
- * ab -n 1000 -c 10 http://localhost:8080/hello
- * 
- * # 4. Test with slow requests (add delay to GetRoutes.handle):
- * #    Add: Thread.sleep(2000); to simulate slow processing
- * 
- * # 5. Memory exhaustion test:
- * #    - Set MAX_BODY_BYTES = 1000 in HttpRequest.java
- *    - Send large POST requests:
- * curl -X POST http://localhost:8080/echo -H "Content-Type: text/plain" -d "$(python3 -c 'print("a" * 2000)')"
- * 
- * # 6. Connection exhaustion:
- * #    - Set ACCEPT_BACKLOG = 1
- *    - Send many concurrent connections:
- * for i in {1..100}; do (curl -s http://localhost:8080/hello &) done; wait
- * 
- * # 7. Malformed requests (should return 400):
- * printf 'GET /hello HTTP/1.0\r\n\r\n' | nc localhost 8080  # Wrong HTTP version
- * printf 'GET /hello HTTP/1.1\r\n\r\n' | nc localhost 8080  # Missing Host header
- * printf 'POST /echo HTTP/1.1\r\nHost: x\r\nContent-Length: 10\r\n\r\nshort' | nc localhost 8080  # Wrong content length
- * 
- * # 8. Header bomb attack:
- * printf 'GET /hello HTTP/1.1\r\nHost: x\r\n%s\r\n\r\n' "$(python3 -c 'print("X-Header: " + "A" * 10000)')" | nc localhost 8080
- * 
- * EXPECTED BEHAVIOR:
- * - First few requests: 200 OK
- * - When queue full: 503 Service Unavailable
- * - Malformed requests: 400 Bad Request
- * - Large requests: 400 Bad Request (if limits set)
- * - Server should NOT crash, just reject requests gracefully
- * 
- * TO ACTUALLY CRASH THE SERVER (DON'T DO THIS IN PRODUCTION):
- * # 1. Out of memory attack:
- * #    - Remove MAX_BODY_BYTES limit
- *    - Send massive requests: curl -X POST http://localhost:8080/echo -d "$(python3 -c 'print("a" * 100000000)')"
- * 
- * # 2. Thread exhaustion:
- * #    - Set WORKER_THREADS = 1, QUEUE_CAPACITY = 0
- *    - Send requests that never complete (infinite loop in route handler)
- * 
- * # 3. Socket exhaustion:
- * #    - Set ACCEPT_BACKLOG = 0
- *    - Open thousands of connections without closing them
+ * # Test error handling (should close connection on errors)
+ * printf 'GET /hello HTTP/1.0\r\n\r\n' | nc localhost 8080
  */
