@@ -1,20 +1,11 @@
 package org.example.tinyhttp;
 
-// Handler recieves (RequestContext, OutputStream)
-
-import java.io.IOException;
-import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-
-@FunctionalInterface
-interface RouteHandler{
-  void handle(RequestContext ctx, OutputStream out, boolean keepAlive) throws IOException;
-}
 
 public final class Router {
   private static final class Route{

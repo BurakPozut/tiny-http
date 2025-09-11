@@ -19,8 +19,6 @@ import org.example.tinyhttp.HttpExceptions.HeaderTooLarge;
 import org.example.tinyhttp.HttpExceptions.HttpVersionNotSupported;
 import org.example.tinyhttp.HttpExceptions.LineTooLong;
 import org.example.tinyhttp.HttpExceptions.NotImplemented;
-import org.example.tinyhttp.routes.GetRoutes;
-import org.example.tinyhttp.routes.PostRoutes;
 
 public final class Main {
     private static final int PORT = 8080;
@@ -136,14 +134,29 @@ public final class Main {
                     boolean keepThisResponseAlive = !clientWantsClose && !serverWantsClose && (served < MAX_REQUESTS_PER_CONN);
 
 
-                    switch (request.getMethod()) {
-                        case "GET" -> GetRoutes.handle(request.getTarget(), out, keepThisResponseAlive);
-                        case "POST" -> PostRoutes.handle(request.getTarget(), out, request.getHeaders(), request.getBody(), keepThisResponseAlive);
-                        default -> {
-                            // 405 and close
-                            HttpResponses.writeText(out, 405, "Method Not Allowed", "Only GET/POST supported\n", false);
-                            keepThisResponseAlive = false;
+                    try {
+                        // --- build Url from target ---
+                        String[] pq = UrlParser.splitPathAndQuery(request.getTarget());
+                        String rawPath  = pq[0];
+                        String rawQuery = pq[1];
+                    
+                        String normPath = UrlParser.normalizePath(rawPath);
+                        var query = UrlParser.parseQuery(rawQuery);
+                        Url url = new Url(request.getTarget(), normPath, query);
+                    
+                        // --- route match ---
+                        var match = ROUTER.find(request.getMethod(), url.path());
+                        if (match.isPresent()) {
+                            RequestContext ctx = new RequestContext(request, url, match.get().pathVars);
+                            match.get().handler.handle(ctx, out, keepThisResponseAlive);
+                        } else {
+                            HttpResponses.writeText(out, 404, "Not Found",
+                                "No route: " + url.path() + "\n", keepThisResponseAlive);
                         }
+                    } catch (IOException badUrl) {
+                        // normalizePath / pctDecode / parseQuery errors → 400 and close
+                        HttpErrorHandler.sendBadRequest(client, badUrl.getMessage());
+                        keepThisResponseAlive = false;
                     }
                     // Next iteration: keep the loop only if we kept this response alive
                     keepAlive = keepThisResponseAlive;
@@ -169,19 +182,42 @@ public final class Main {
             System.err.println("[tiny-http] socket error: " + e.getMessage());
         }
     }
+
+    private static final Router ROUTER = new Router()
+        .get("/hello", (ctx, out, keepAlive) -> {
+            String name = ctx.query("name");
+            String msg = (name == null) ? "Hello World\n" : ("Hello " + name + "\n");
+            HttpResponses.writeText(out, 200, "OK", msg, keepAlive);
+        })
+        .get("/users/:id", (ctx, out, keepAlive) -> {
+            String id = ctx.pathVars("id"); // Already decoded
+            HttpResponses.writeText(out, 200, "OK", "user " + id + "\n", keepAlive);
+        })
+        .post("/echo", (ctx, out, keepAlive) -> {
+            String ct = ctx.request().getHeaders().first("content-type", "application/octet-stream");
+            HttpResponses.writeRaw(out, 200, "OK", ct, ctx.request().getBody(), keepAlive);
+        });
 }
 
 /*
- * STEP 6: keep-alive handling
+ * Step 7 — Router & URL parsing
  * 
  * 
- * Test keep-alive functionality:
- * # Single connection with multiple requests
- * printf 'GET /hello HTTP/1.1\r\nHost: x\r\n\r\nGET /hello HTTP/1.1\r\nHost: x\r\n\r\n' | nc localhost 8080
- * 
- * # Test with curl (easier to read)
- * curl http://localhost:8080/hello
- * 
- * # Test error handling (should close connection on errors)
- * printf 'GET /hello HTTP/1.0\r\n\r\n' | nc localhost 8080
+    # simple route
+    curl -v "http://localhost:8080/hello"
+
+    # query param
+    curl -v "http://localhost:8080/hello?name=Burak"
+
+    # path param
+    curl -v "http://localhost:8080/users/42"
+
+    # two requests on one connection
+    printf 'GET /hello HTTP/1.1\r\nHost: x\r\n\r\nGET /users/99 HTTP/1.1\r\nHost: x\r\n\r\n' | nc -w 2 localhost 8080
+
+    # bad escapes -> 400
+    printf 'GET /hello?name=%ZZ HTTP/1.1\r\nHost: x\r\n\r\n' | nc -w 1 localhost 8080
+
+    # traversal attempt -> 400
+    printf 'GET /../../etc/passwd HTTP/1.1\r\nHost: x\r\n\r\n' | nc -w 1 localhost 8080
  */
