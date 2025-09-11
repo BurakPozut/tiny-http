@@ -1,8 +1,10 @@
-package org.example.tinyhttp;
+package org.example.tinyhttp.http.response;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+
+import org.example.tinyhttp.server.HttpServer;
 
 public final class HttpResponses {
   private HttpResponses() {
@@ -19,8 +21,8 @@ public final class HttpResponses {
 
     if(keepAlive){
       sb.append("Connection: keep-alive\r\n")
-      .append("Keep-Alive: timeout=").append(Main.KEEP_ALIVE_IDLE_TIMEOUT_MS / 1000)
-      .append(", max=").append(Main.MAX_REQUESTS_PER_CONN).append("\r\n");
+      .append("Keep-Alive: timeout=").append(HttpServer.KEEP_ALIVE_IDLE_TIMEOUT_MS / 1000)
+      .append(", max=").append(HttpServer.MAX_REQUESTS_PER_CONN).append("\r\n");
     } else{
       sb.append("Connection: close\r\n");
     }
@@ -47,8 +49,8 @@ public final class HttpResponses {
 
     if(keepAlive){
       sb.append("Connection: keep-alive\r\n")
-        .append("Keep-Alive: timeout=").append(Main.KEEP_ALIVE_IDLE_TIMEOUT_MS / 1000)
-        .append(", max=").append(Main.MAX_REQUESTS_PER_CONN).append("\r\n");
+        .append("Keep-Alive: timeout=").append(HttpServer.KEEP_ALIVE_IDLE_TIMEOUT_MS / 1000)
+        .append(", max=").append(HttpServer.MAX_REQUESTS_PER_CONN).append("\r\n");
     } else{
       sb.append("Connection: close\r\n");
     }

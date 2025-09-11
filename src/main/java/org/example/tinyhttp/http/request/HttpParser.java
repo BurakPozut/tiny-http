@@ -1,9 +1,11 @@
-package org.example.tinyhttp;
+package org.example.tinyhttp.http.request;
 
 import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+
+import org.example.tinyhttp.http.HttpExceptions;
 
 public final class HttpParser {
     private HttpParser() {}

@@ -1,6 +1,9 @@
-package org.example.tinyhttp;
+package org.example.tinyhttp.context;
 
 import java.util.Map;
+
+import org.example.tinyhttp.http.request.HttpRequest;
+import org.example.tinyhttp.parsing.Url;
 
 public class RequestContext {
   private final HttpRequest req;

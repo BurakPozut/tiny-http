@@ -1,4 +1,4 @@
-package org.example.tinyhttp;
+package org.example.tinyhttp.server;
 
 import java.io.BufferedInputStream;
 import java.io.IOException;
@@ -14,13 +14,22 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import org.example.tinyhttp.HttpExceptions.BadRequest;
-import org.example.tinyhttp.HttpExceptions.HeaderTooLarge;
-import org.example.tinyhttp.HttpExceptions.HttpVersionNotSupported;
-import org.example.tinyhttp.HttpExceptions.LineTooLong;
-import org.example.tinyhttp.HttpExceptions.NotImplemented;
+import org.example.tinyhttp.context.RequestContext;
+import org.example.tinyhttp.http.HttpExceptions.BadRequest;
+import org.example.tinyhttp.http.HttpExceptions.HeaderTooLarge;
+import org.example.tinyhttp.http.HttpExceptions.HttpVersionNotSupported;
+import org.example.tinyhttp.http.HttpExceptions.LineTooLong;
+import org.example.tinyhttp.http.HttpExceptions.NotImplemented;
+import org.example.tinyhttp.http.request.HttpRequest;
+import org.example.tinyhttp.http.response.HttpErrorHandler;
+import org.example.tinyhttp.http.response.HttpResponses;
+import org.example.tinyhttp.parsing.Url;
+import org.example.tinyhttp.parsing.UrlParser;
+import org.example.tinyhttp.routing.Router;
 
-public final class Main {
+
+
+public final class HttpServer {
     private static final int PORT = 8080;
 
     // Concurrency / socket tuning
@@ -32,7 +41,7 @@ public final class Main {
     public static final int KEEP_ALIVE_IDLE_TIMEOUT_MS = 5000;  // idle gap between requests
     public static final int MAX_REQUESTS_PER_CONN      = 100;   // safety cap
 
-    private Main() {}
+    private HttpServer() {}
 
     private static volatile boolean running = true;
 

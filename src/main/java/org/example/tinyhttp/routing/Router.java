@@ -1,4 +1,4 @@
-package org.example.tinyhttp;
+package org.example.tinyhttp.routing;
 
 import java.util.ArrayList;
 import java.util.Arrays;

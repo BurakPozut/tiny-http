@@ -1,4 +1,4 @@
-package org.example.tinyhttp;
+package org.example.tinyhttp.http.request;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;

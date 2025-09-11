@@ -1,12 +1,10 @@
-package org.example.tinyhttp;
+package org.example.tinyhttp.http.request;
 
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.util.List;
 
-import static org.example.tinyhttp.HttpParser.readFixedBytes;
-import static org.example.tinyhttp.HttpParser.readLineCRLF;
-
+import org.example.tinyhttp.http.HttpExceptions;
 
 public final class HttpRequest {
   private static final int MAX_REQUEST_LINE_BYTES = 8192; // 8KB
@@ -39,7 +37,7 @@ public final class HttpRequest {
 
   public static HttpRequest parse(BufferedInputStream in) throws IOException {
     // Read Request Line
-    String requestLine = readLineCRLF(in, MAX_REQUEST_LINE_BYTES);
+    String requestLine = HttpParser.readLineCRLF(in, MAX_REQUEST_LINE_BYTES);
     
     if(requestLine == null || requestLine.isEmpty())
       throw new HttpExceptions.BadRequest("Empty Request Line");
@@ -100,7 +98,7 @@ public final class HttpRequest {
     // 5. Read body
     byte[] body = new byte[0];
     if (contentLength != null && contentLength > 0) {
-      body = readFixedBytes(in, contentLength);
+      body = HttpParser.readFixedBytes(in, contentLength);
     }
     return new HttpRequest(method, target, version, headers, body);
 
@@ -111,7 +109,7 @@ public final class HttpRequest {
     int totalBytes = 0, count = 0;
 
     while (true) {
-        String line = readLineCRLF(in);
+        String line = HttpParser.readLineCRLF(in);
         if (line == null)
             throw new HttpExceptions.BadRequest("Unexpected end of headers");
         if (line.isEmpty())

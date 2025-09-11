@@ -1,4 +1,4 @@
-package org.example.tinyhttp;
+package org.example.tinyhttp.parsing;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

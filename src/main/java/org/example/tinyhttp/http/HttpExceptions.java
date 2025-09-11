@@ -1,4 +1,4 @@
-package org.example.tinyhttp;
+package org.example.tinyhttp.http;
 
 import java.io.IOException;
 

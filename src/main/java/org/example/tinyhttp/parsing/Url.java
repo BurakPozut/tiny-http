@@ -1,4 +1,4 @@
-package org.example.tinyhttp;
+package org.example.tinyhttp.parsing;
 
 import java.util.List;
 import java.util.Map;

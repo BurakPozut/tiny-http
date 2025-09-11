@@ -1,8 +1,10 @@
 // File: RouteHandler.java
-package org.example.tinyhttp;
+package org.example.tinyhttp.routing;
 
 import java.io.IOException;
 import java.io.OutputStream;
+
+import org.example.tinyhttp.context.RequestContext;
 
 @FunctionalInterface
 public interface RouteHandler{
