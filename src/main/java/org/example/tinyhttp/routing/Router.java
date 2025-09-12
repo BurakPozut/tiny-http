@@ -3,9 +3,11 @@ package org.example.tinyhttp.routing;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public final class Router {
   private static final class Route{
@@ -43,6 +45,9 @@ public final class Router {
   
   public Router get(String pattern, RouteHandler h){ routes.add(new Route("GET", pattern, h)); return this;}
   public Router post(String pattern, RouteHandler h){ routes.add(new Route("POST", pattern, h)); return this;}
+  public Router head(String pattern, RouteHandler h) { routes.add(new Route("HEAD", pattern, h)); return this;}
+  public Router options(String pattern, RouteHandler h) { routes.add(new Route("OPTIONS", pattern, h)); return this;}
+
 
   public Optional<Match> find(String method, String path){
     String[] segs = Arrays.stream(path.split("/")).filter(s -> !s.isEmpty()).toArray(String[]::new);
@@ -55,6 +60,22 @@ public final class Router {
     }
 
     return Optional.empty();
+  }
+
+  public Set<String> allowedForPath(String path){
+    String[] segs = Arrays.stream(path.split("/")).filter(s -> !s.isEmpty()).toArray(String[]::new);
+    Set<String> allowed = new LinkedHashSet<>();
+
+    for(Route r: routes){
+      Map<String, String> tmp = new LinkedHashMap<>();
+      if(r.matches(r.method, segs, tmp)){
+        allowed.add(r.method);
+      }
+    }
+
+    // If GET exists and HEAD not, many servers imply HEAD is allowed
+    if(allowed.contains("GET")) allowed.add("HEAD");
+    return allowed;
   }
 
   public static final class Match{

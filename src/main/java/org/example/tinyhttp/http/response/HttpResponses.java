@@ -3,11 +3,20 @@ package org.example.tinyhttp.http.response;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 
 import org.example.tinyhttp.server.HttpServer;
 
 public final class HttpResponses {
-  private HttpResponses() {
+  private HttpResponses() {}
+
+  private static final String SERVER_NAME = "tiny-http/0.1";
+
+  private static String rfc1123Now(){
+    ZonedDateTime z = ZonedDateTime.now(ZoneOffset.UTC);
+    return DateTimeFormatter.RFC_1123_DATE_TIME.format(z);
   }
 
   public static void writeText(OutputStream out, int status, String reason, String text, 
@@ -16,6 +25,8 @@ public final class HttpResponses {
     byte[] body = text.getBytes(StandardCharsets.UTF_8);
     StringBuilder sb = new StringBuilder(128);
     sb.append("HTTP/1.1 ").append(status).append(' ').append(reason).append("\r\n")
+      .append("Date: ").append(rfc1123Now()).append("\r\n")
+      .append("Server: ").append(SERVER_NAME).append("\r\n")
       .append("Content-Type: text/plain; charset=utf-8\r\n")
       .append("Content-Length: ").append(body.length).append("\r\n");
 
@@ -44,6 +55,8 @@ public final class HttpResponses {
 
     StringBuilder sb = new StringBuilder(128);
     sb.append("HTTP/1.1 ").append(status).append(' ').append(reason).append("\r\n")
+      .append("Date: ").append(rfc1123Now()).append("\r\n")
+      .append("Server: ").append(SERVER_NAME).append("\r\n")
       .append("Content-Type: ").append(contentType).append("\r\n")
       .append("Content-Length: ").append(body.length).append("\r\n");
 
@@ -61,8 +74,23 @@ public final class HttpResponses {
     out.flush();
   }
 
-  // convenience: default to close (so old calls keep working)
-  // public static void writeRaw(OutputStream out, int status, String reason, String contentType, byte[] body) throws IOException {
-  //   writeRaw(out, status, reason, contentType, body, false, 0, 0);
-  // }
+  public static void writeHEAD(OutputStream out, int status, String reason, String contentType, int length, 
+  boolean  keepAlive) throws  IOException{
+    StringBuilder sb = new StringBuilder(128);
+    sb.append("HTTP/1.1").append(status).append(' ').append(reason).append("\r\n")
+    .append("Date: ").append(rfc1123Now()).append("\r\n")
+    .append("Server: ").append(SERVER_NAME).append("\r\n")
+    .append("Content-Type: ").append(contentType).append("\r\n")
+    .append("Content-Length: ").append(length).append("\r\n");
+    if (keepAlive) {
+      sb.append("Connection: keep-alive\r\n")
+        .append("Keep-Alive: timeout=").append(HttpServer.KEEP_ALIVE_IDLE_TIMEOUT_MS / 1000)
+        .append(", max=").append(HttpServer.MAX_REQUESTS_PER_CONN).append("\r\n");
+    } else {
+        sb.append("Connection: close\r\n");
+    }
+    sb.append("\r\n");
+    out.write(sb.toString().getBytes(StandardCharsets.US_ASCII));
+    out.flush();
+  }
 }
