@@ -19,8 +19,13 @@ public final class HttpResponses {
     return DateTimeFormatter.RFC_1123_DATE_TIME.format(z);
   }
 
+  // original convenience
+  public static void writeText(OutputStream out, int status, String reason, String text, boolean keepAlive) throws IOException {
+    writeText(out, status, reason, text, keepAlive, null); // delegate
+  }
+
   public static void writeText(OutputStream out, int status, String reason, String text, 
-    boolean  keepAlive) throws IOException {
+    boolean  keepAlive, String[][] extraHeaders) throws IOException {
 
     byte[] body = text.getBytes(StandardCharsets.UTF_8);
     StringBuilder sb = new StringBuilder(128);
@@ -29,6 +34,14 @@ public final class HttpResponses {
       .append("Server: ").append(SERVER_NAME).append("\r\n")
       .append("Content-Type: text/plain; charset=utf-8\r\n")
       .append("Content-Length: ").append(body.length).append("\r\n");
+
+      if(extraHeaders != null){
+        for(String[] h : extraHeaders){
+          if(h != null && h.length == 2 && h[0] != null){
+            sb.append(h[0]).append(": ").append(h[1] == null ? "" : h[1]).append("\r\n");
+          }
+        }
+      }
 
     if(keepAlive){
       sb.append("Connection: keep-alive\r\n")
@@ -77,7 +90,7 @@ public final class HttpResponses {
   public static void writeHEAD(OutputStream out, int status, String reason, String contentType, int length, 
   boolean  keepAlive) throws  IOException{
     StringBuilder sb = new StringBuilder(128);
-    sb.append("HTTP/1.1").append(status).append(' ').append(reason).append("\r\n")
+    sb.append("HTTP/1.1 ").append(status).append(' ').append(reason).append("\r\n")
     .append("Date: ").append(rfc1123Now()).append("\r\n")
     .append("Server: ").append(SERVER_NAME).append("\r\n")
     .append("Content-Type: ").append(contentType).append("\r\n")

@@ -25,208 +25,235 @@ import org.example.tinyhttp.http.response.HttpErrorHandler;
 import org.example.tinyhttp.http.response.HttpResponses;
 import org.example.tinyhttp.parsing.Url;
 import org.example.tinyhttp.parsing.UrlParser;
+import org.example.tinyhttp.routing.ResponseMetaData;
 import org.example.tinyhttp.routing.Router;
 
 
 
 public final class HttpServer {
-    private static final int PORT = 8080;
+  private static final int PORT = 8080;
 
-    // Concurrency / socket tuning
-    private static final int ACCEPT_BACKLOG         = 128; // pending connections OS queue
-    private static final int WORKER_THREADS         = Math.max(2, Runtime.getRuntime().availableProcessors());
-    private static final int QUEUE_CAPACITY         = 256; // backpressure; reject beyond this
-    private static final int SOCKET_READ_TIMEOUT_MS = 10_000; // per-connection read timeout
+  // Concurrency / socket tuning
+  private static final int ACCEPT_BACKLOG         = 128; // pending connections OS queue
+  private static final int WORKER_THREADS         = Math.max(2, Runtime.getRuntime().availableProcessors());
+  private static final int QUEUE_CAPACITY         = 256; // backpressure; reject beyond this
+  private static final int SOCKET_READ_TIMEOUT_MS = 10_000; // per-connection read timeout
 
-    public static final int KEEP_ALIVE_IDLE_TIMEOUT_MS = 5000;  // idle gap between requests
-    public static final int MAX_REQUESTS_PER_CONN      = 100;   // safety cap
+  public static final int KEEP_ALIVE_IDLE_TIMEOUT_MS = 5000;  // idle gap between requests
+  public static final int MAX_REQUESTS_PER_CONN      = 100;   // safety cap
 
-    private HttpServer() {}
+  private HttpServer() {}
 
-    private static volatile boolean running = true;
+  private static volatile boolean running = true;
 
-    private static ThreadPoolExecutor newWorkerPool(){
-        var queue = new ArrayBlockingQueue<Runnable>(QUEUE_CAPACITY);
-        var tf = new ThreadFactory() {
-            private final ThreadFactory def = Executors.defaultThreadFactory();
-            private int n = 0;
-            @Override public Thread newThread(Runnable r){
-                Thread t = def.newThread(r);
-                t.setName("tiny-http-" + (++n));
-                t.setDaemon(false);
-                return t;
-            }
-        };
-        return new ThreadPoolExecutor(WORKER_THREADS, WORKER_THREADS, 0L, 
-        TimeUnit.MILLISECONDS, queue, tf, new ThreadPoolExecutor.AbortPolicy());
+  private static ThreadPoolExecutor newWorkerPool(){
+      var queue = new ArrayBlockingQueue<Runnable>(QUEUE_CAPACITY);
+      var tf = new ThreadFactory() {
+          private final ThreadFactory def = Executors.defaultThreadFactory();
+          private int n = 0;
+          @Override public Thread newThread(Runnable r){
+              Thread t = def.newThread(r);
+              t.setName("tiny-http-" + (++n));
+              t.setDaemon(false);
+              return t;
+          }
+      };
+      return new ThreadPoolExecutor(WORKER_THREADS, WORKER_THREADS, 0L, 
+      TimeUnit.MILLISECONDS, queue, tf, new ThreadPoolExecutor.AbortPolicy());
+  }
+
+  public static void main(String[] args) {
+      System.out.println("[tiny-http] listening on http://localhost:" + PORT);
+
+      ThreadPoolExecutor pool = newWorkerPool();
+
+      try(ServerSocket server = new ServerSocket(PORT, ACCEPT_BACKLOG)){
+          server.setReuseAddress(true);
+
+          Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+              System.out.println("[tiny-http] Shut down requested");
+              running = false;
+              try{server.close();}catch(IOException ignored){}
+              pool.shutdown();
+              try{
+                  if(!pool.awaitTermination(10, TimeUnit.SECONDS)){
+                      System.out.println("[tiny-http] forcing worker shutdown");
+                      pool.shutdownNow();
+                  }
+              }catch(InterruptedException ie){
+                  pool.shutdownNow();
+                  Thread.currentThread().interrupt();
+              }
+          },"tiny-http-shutdown"));
+
+          while(running){
+              try{
+                  Socket client = server.accept();
+                  client.setSoTimeout(SOCKET_READ_TIMEOUT_MS);
+                  try {
+                      pool.execute(() -> {handle(client);});
+                  } catch (RejectedExecutionException rex) {
+                        // Queue full → send 503 and drop (backpressure)
+                        HttpErrorHandler.sendErrorResponse(client, 503, "Service Unavailable", "Server overloaded, please try again");
+                  }
+              } catch(SocketException se){
+                  // Likely closed during shutdown
+                  if (running) System.err.println("[tiny-http] accept error: " + se.getMessage());
+              } catch(IOException e){
+                  System.err.println("[tiny-http] accept error: " + e.getMessage());
+              }
+          }
+      } catch(IOException e) {
+          System.err.println("[tiny-http] server error: " + e.getMessage());
+      } finally{
+          pool.shutdown();
+      }
+      System.out.println("[tiny-http] done (accepted one connection)");
+
+  }
+
+  private static void handle(Socket client) {
+      try(client) {
+          OutputStream out = client.getOutputStream();
+          BufferedInputStream bufferedIn = new BufferedInputStream(client.getInputStream());
+
+          int served = 0;
+          boolean keepAlive = true;
+
+          client.setSoTimeout(KEEP_ALIVE_IDLE_TIMEOUT_MS);
+
+          while(keepAlive && served < MAX_REQUESTS_PER_CONN){
+              keepAlive = false; // Start pessimistic, set to true only on success
+
+              try {
+                  HttpRequest request = HttpRequest.parse(bufferedIn);
+                  served++;
+
+                  // Expect: 100-continue (ack before reading body if your parser defers body)
+                  String expect = request.getHeaders().first("expect");
+                  if(expect != null && expect.equalsIgnoreCase("100-continue")){
+                      out.write("HTTP/1.1 100 Continue\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
+                      out.flush();
+                  }
+
+                  // Decide connection semantics for THIS response
+                  String connHeader = request.getHeaders().first("connection");
+                  boolean clientWantsClose = connHeader != null && connHeader.equalsIgnoreCase("close");
+                  boolean serverWantsClose = false;
+
+                  boolean keepThisResponseAlive = !clientWantsClose && !serverWantsClose && (served < MAX_REQUESTS_PER_CONN);
+
+
+                  try {
+                    // --- build Url from target ---
+                    String[] pq = UrlParser.splitPathAndQuery(request.getTarget());
+                    String rawPath  = pq[0];
+                    String rawQuery = pq[1];
+                
+                    String normPath = UrlParser.normalizePath(rawPath);
+                    var query = UrlParser.parseQuery(rawQuery);
+                    Url url = new Url(request.getTarget(), normPath, query);
+                
+                    // --- route match ---
+                    // If the method is Options we dont need to look at anything else
+                    if("OPTIONS".equals(request.getMethod())){
+                      handleOptionsRequest(url, out, keepAlive);
+                      continue;
+                    }
+                    var match = ROUTER.find(request.getMethod(), url.path());
+                    if (match.isPresent()) {
+                      RequestContext ctx = new RequestContext(request, url, match.get().pathVars);
+                      if ("HEAD".equals(request.getMethod())) {
+                        ResponseMetaData meta = match.get().handler.getMetaData(ctx);
+                        HttpResponses.writeHEAD(out, 200, "OK", meta.contentType, meta.contentLength, keepThisResponseAlive);
+                      } else {
+                          // Normal GET, POST, etc.
+                          match.get().handler.handle(ctx, out, keepThisResponseAlive);
+                      }
+                    } else {
+                      handleNoMatchFound(client, url, out);
+                    }
+                  } catch (IOException badUrl) {
+                    // normalizePath / pctDecode / parseQuery errors → 400 and close
+                    HttpErrorHandler.sendBadRequest(client, badUrl.getMessage());
+                    keepThisResponseAlive = false;
+                  }
+                  // Next iteration: keep the loop only if we kept this response alive
+                  keepAlive = keepThisResponseAlive;
+              } catch (BadRequest e) {
+                HttpErrorHandler.sendBadRequest(client, e.getMessage());
+              } catch (HeaderTooLarge e) {
+                HttpErrorHandler.sendHeaderTooLarge(client, e.getMessage());
+              } catch (NotImplemented e) {
+                HttpErrorHandler.sendNotImplemented(client, e.getMessage());
+              } catch (HttpVersionNotSupported e) {
+                HttpErrorHandler.sendHttpVersionNotSupported(client, e.getMessage());
+              } catch (LineTooLong e) {
+                HttpErrorHandler.sendLineTooLong(client, e.getMessage());
+              } catch (IOException ioe) {
+                System.err.println("[tiny-http] io error: " + ioe.getMessage());
+                // best-effort error response only if stream still usable (optional)
+              } catch(Exception e){
+                HttpErrorHandler.sendInternalServerError(client, "oops");
+              }
+          }
+      } catch(IOException e){
+        // Socket-level errors (connection issues, etc.)
+        System.err.println("[tiny-http] socket error: " + e.getMessage());
+      }
+  }
+
+  private static void handleOptionsRequest(Url url, OutputStream out, boolean keepAlive) throws IOException {
+    var allowed = ROUTER.allowedForPath(url.path());
+    if(!allowed.isEmpty()){
+      String allowHeader = String.join(",", allowed);
+      HttpResponses.writeText(out, 204, "No Content", "", keepAlive, new String[][]{{"Allow",allowHeader}});
+    } else{
+      HttpResponses.writeText(out, 404, "Not Found", "No route: " + url.path() + "\n", keepAlive);
     }
+  }
 
-    public static void main(String[] args) {
-        System.out.println("[tiny-http] listening on http://localhost:" + PORT);
-
-        ThreadPoolExecutor pool = newWorkerPool();
-
-        try(ServerSocket server = new ServerSocket(PORT, ACCEPT_BACKLOG)){
-            server.setReuseAddress(true);
-
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                System.out.println("[tiny-http] Shut down requested");
-                running = false;
-                try{server.close();}catch(IOException ignored){}
-                pool.shutdown();
-                try{
-                    if(!pool.awaitTermination(10, TimeUnit.SECONDS)){
-                        System.out.println("[tiny-http] forcing worker shutdown");
-                        pool.shutdownNow();
-                    }
-                }catch(InterruptedException ie){
-                    pool.shutdownNow();
-                    Thread.currentThread().interrupt();
-                }
-            },"tiny-http-shutdown"));
-
-            while(running){
-                try{
-                    Socket client = server.accept();
-                    client.setSoTimeout(SOCKET_READ_TIMEOUT_MS);
-                    try {
-                        pool.execute(() -> {handle(client);});
-                    } catch (RejectedExecutionException rex) {
-                         // Queue full → send 503 and drop (backpressure)
-                         HttpErrorHandler.sendErrorResponse(client, 503, "Service Unavailable", "Server overloaded, please try again");
-                    }
-                } catch(SocketException se){
-                    // Likely closed during shutdown
-                    if (running) System.err.println("[tiny-http] accept error: " + se.getMessage());
-                } catch(IOException e){
-                    System.err.println("[tiny-http] accept error: " + e.getMessage());
-                }
-            }
-        } catch(IOException e) {
-            System.err.println("[tiny-http] server error: " + e.getMessage());
-        } finally{
-            pool.shutdown();
-        }
-        System.out.println("[tiny-http] done (accepted one connection)");
-
+  private static void handleNoMatchFound(Socket client, Url url, OutputStream out) throws IOException{
+    var allowed = ROUTER.allowedForPath(url.path());
+    // If the path exits but the method is wrong, If there
+    if(!allowed.isEmpty()){
+      String allowHeader = String.join(",", allowed);
+      HttpErrorHandler.sendMethodNotAllowed(client, allowHeader);
+    } else{
+      HttpResponses.writeText(out, 404, "Not Found", "No route: " + url.path() + "\n", false);
     }
+  }
 
-    private static void handle(Socket client) {
-        try(client) {
-            OutputStream out = client.getOutputStream();
-            BufferedInputStream bufferedIn = new BufferedInputStream(client.getInputStream());
-
-            int served = 0;
-            boolean keepAlive = true;
-
-            client.setSoTimeout(KEEP_ALIVE_IDLE_TIMEOUT_MS);
-
-            while(keepAlive && served < MAX_REQUESTS_PER_CONN){
-                keepAlive = false; // Start pessimistic, set to true only on success
-
-                try {
-                    HttpRequest request = HttpRequest.parse(bufferedIn);
-                    served++;
-
-                    // Expect: 100-continue (ack before reading body if your parser defers body)
-                    String expect = request.getHeaders().first("expect");
-                    if(expect != null && expect.equalsIgnoreCase("100-continue")){
-                        out.write("HTTP/1.1 100 Continue\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
-                        out.flush();
-                    }
-
-                    // Decide connection semantics for THIS response
-                    String connHeader = request.getHeaders().first("connection");
-                    boolean clientWantsClose = connHeader != null && connHeader.equalsIgnoreCase("close");
-                    boolean serverWantsClose = false;
-
-                    boolean keepThisResponseAlive = !clientWantsClose && !serverWantsClose && (served < MAX_REQUESTS_PER_CONN);
-
-
-                    try {
-                        // --- build Url from target ---
-                        String[] pq = UrlParser.splitPathAndQuery(request.getTarget());
-                        String rawPath  = pq[0];
-                        String rawQuery = pq[1];
-                    
-                        String normPath = UrlParser.normalizePath(rawPath);
-                        var query = UrlParser.parseQuery(rawQuery);
-                        Url url = new Url(request.getTarget(), normPath, query);
-                    
-                        // --- route match ---
-                        var match = ROUTER.find(request.getMethod(), url.path());
-                        if (match.isPresent()) {
-                            RequestContext ctx = new RequestContext(request, url, match.get().pathVars);
-                            match.get().handler.handle(ctx, out, keepThisResponseAlive);
-                        } else {
-                            HttpResponses.writeText(out, 404, "Not Found",
-                                "No route: " + url.path() + "\n", keepThisResponseAlive);
-                        }
-                    } catch (IOException badUrl) {
-                        // normalizePath / pctDecode / parseQuery errors → 400 and close
-                        HttpErrorHandler.sendBadRequest(client, badUrl.getMessage());
-                        keepThisResponseAlive = false;
-                    }
-                    // Next iteration: keep the loop only if we kept this response alive
-                    keepAlive = keepThisResponseAlive;
-                } catch (BadRequest e) {
-                    HttpErrorHandler.sendBadRequest(client, e.getMessage());
-                } catch (HeaderTooLarge e) {
-                    HttpErrorHandler.sendHeaderTooLarge(client, e.getMessage());
-                } catch (NotImplemented e) {
-                    HttpErrorHandler.sendNotImplemented(client, e.getMessage());
-                } catch (HttpVersionNotSupported e) {
-                    HttpErrorHandler.sendHttpVersionNotSupported(client, e.getMessage());
-                } catch (LineTooLong e) {
-                    HttpErrorHandler.sendLineTooLong(client, e.getMessage());
-                } catch (IOException ioe) {
-                    System.err.println("[tiny-http] io error: " + ioe.getMessage());
-                    // best-effort error response only if stream still usable (optional)
-                } catch(Exception e){
-                    HttpErrorHandler.sendInternalServerError(client, "oops");
-                }
-            }
-        } catch(IOException e){
-            // Socket-level errors (connection issues, etc.)
-            System.err.println("[tiny-http] socket error: " + e.getMessage());
-        }
-    }
-
-    private static final Router ROUTER = new Router()
-        .get("/hello", (ctx, out, keepAlive) -> {
-            String name = ctx.query("name");
-            String msg = (name == null) ? "Hello World\n" : ("Hello " + name + "\n");
-            HttpResponses.writeText(out, 200, "OK", msg, keepAlive);
-        })
-        .get("/users/:id", (ctx, out, keepAlive) -> {
-            String id = ctx.pathVars("id"); // Already decoded
-            HttpResponses.writeText(out, 200, "OK", "user " + id + "\n", keepAlive);
-        })
-        .post("/echo", (ctx, out, keepAlive) -> {
-            String ct = ctx.request().getHeaders().first("content-type", "application/octet-stream");
-            HttpResponses.writeRaw(out, 200, "OK", ct, ctx.request().getBody(), keepAlive);
-        });
+  private static final Router ROUTER = new Router()
+      .get("/hello", (ctx, out, keepAlive) -> {
+        String name = ctx.query("name");
+        String msg = (name == null) ? "Hello World\n" : ("Hello " + name + "\n");
+        HttpResponses.writeText(out, 200, "OK", msg, keepAlive);
+      })
+      .get("/users/:id", (ctx, out, keepAlive) -> {
+        String id = ctx.pathVars("id"); // Already decoded
+        HttpResponses.writeText(out, 200, "OK", "user " + id + "\n", keepAlive);
+      })
+      .post("/echo", (ctx, out, keepAlive) -> {
+        String ct = ctx.request().getHeaders().first("content-type", "application/octet-stream");
+        HttpResponses.writeRaw(out, 200, "OK", ct, ctx.request().getBody(), keepAlive);
+      }).options("*", (ctx, out, keepAlive) -> {
+        // Advertise what you generally support
+        String allow = "GET,HEAD,POST,OPTIONS";
+        HttpResponses.writeText(out, 204, "No Content", "", keepAlive, new String[][]{{"Allow",allow}});
+    });
 }
 
 /*
  * Step 7 — Router & URL parsing
  * 
  * 
-    # simple route
-    curl -v "http://localhost:8080/hello"
+# Test HEAD requests
+curl -I -H "Host: localhost" "http://localhost:8080/hello"
 
-    # query param
-    curl -v "http://localhost:8080/hello?name=Burak"
+# Test OPTIONS requests  
+curl -i -X OPTIONS -H "Host: localhost" "http://localhost:8080/hello"
 
-    # path param
-    curl -v "http://localhost:8080/users/42"
-
-    # two requests on one connection
-    printf 'GET /hello HTTP/1.1\r\nHost: x\r\n\r\nGET /users/99 HTTP/1.1\r\nHost: x\r\n\r\n' | nc -w 2 localhost 8080
-
-    # bad escapes -> 400
-    printf 'GET /hello?name=%ZZ HTTP/1.1\r\nHost: x\r\n\r\n' | nc -w 1 localhost 8080
-
-    # traversal attempt -> 400
-    printf 'GET /../../etc/passwd HTTP/1.1\r\nHost: x\r\n\r\n' | nc -w 1 localhost 8080
+# Test method validation (405 Method Not Allowed)
+curl -i -X PUT -H "Host: localhost" "http://localhost:8080/hello"
  */

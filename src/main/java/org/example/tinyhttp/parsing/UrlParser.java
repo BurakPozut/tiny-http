@@ -21,6 +21,10 @@ public class UrlParser {
 
   // 2) Normalize path. Remove duplicate '/' reject '..'
   public static String normalizePath(String path) throws IOException{
+    // Special case: OPTIONS * (wildcard)
+    if("*".equals(path)){
+      return "*";
+    }
     if(!path.startsWith("/")) throw new IOException("Path must start with '/'");
     // collapse '/'
     while(path.contains("//")) path = path.replace("//", "/");

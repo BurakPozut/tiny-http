@@ -57,9 +57,20 @@ public final class Router {
       if(r.matches(method, segs, vars)){
         return Optional.of(new Match(r.handler, vars));
       }
+
+      if(isSpecialMatch(method, r, segs, vars)){
+        return Optional.of(new Match(r.handler, vars));
+      }
     }
 
     return Optional.empty();
+  }
+
+  private boolean isSpecialMatch(String method, Route route, String[] segs, Map<String, String> vars){
+    if("HEAD".equals(method) && route.matches("GET", segs, vars)){
+      return true;
+    }
+    return "*".equals(route.method) && "OPTIONS".equals(method);
   }
 
   public Set<String> allowedForPath(String path){
@@ -75,6 +86,7 @@ public final class Router {
 
     // If GET exists and HEAD not, many servers imply HEAD is allowed
     if(allowed.contains("GET")) allowed.add("HEAD");
+    allowed.add("OPTIONS");
     return allowed;
   }
 

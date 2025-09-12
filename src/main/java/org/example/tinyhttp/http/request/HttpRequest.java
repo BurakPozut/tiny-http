@@ -56,8 +56,8 @@ public final class HttpRequest {
       throw new HttpExceptions.HttpVersionNotSupported("Only HTTP/1.1 supported");
     
     // Verify basic target sanity
-    if (target.isEmpty() || !target.startsWith("/")) 
-      throw new HttpExceptions.BadRequest("Target must start with '/'");
+    if (target.isEmpty() || (!target.startsWith("/") && !target.equals("*"))) 
+      throw new HttpExceptions.BadRequest("Target must start with '/' or be '*'");
 
     if (target.length() > MAX_TARGET_LENGTH) 
         throw new HttpExceptions.HeaderTooLarge("Target too long");
