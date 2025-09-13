@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.util.List;
 
 import org.example.tinyhttp.http.HttpExceptions;
+import static org.example.tinyhttp.http.request.HttpParser.readChunkedBody;
 
 public final class HttpRequest {
   private static final int MAX_REQUEST_LINE_BYTES = 8192; // 8KB
@@ -77,12 +78,23 @@ public final class HttpRequest {
     // 4. Parse body semantics
     String cl = headers.first("content-length");
     String te = headers.first("transfer-encoding");
+    byte[] body = new byte[0];
 
     if (cl != null && te != null)
         throw new HttpExceptions.BadRequest("Content-Length and Transfer-Encoding both present");
+        
 
-    if (te != null && !te.equalsIgnoreCase("identity"))
-        throw new HttpExceptions.NotImplemented("Transfer-Encoding not implemented");
+    // RFC: if TE present, must NOT include Content-Length
+    if(te != null){
+        if(cl != null) throw new HttpExceptions.BadRequest("Both Transfer-Encoding and Content-Length is present");
+        if(!te.equalsIgnoreCase("chunked")){
+            throw new HttpExceptions.NotImplemented("Transfer-Encoding not supported: " + te);
+        }
+        body = readChunkedBody(in, MAX_TARGET_LENGTH);
+        
+    }
+    // if (te != null && !te.equalsIgnoreCase("identity"))
+    //     throw new HttpExceptions.NotImplemented("Transfer-Encoding not implemented");
 
     Long contentLength = null;
     if (cl != null) {
@@ -93,13 +105,13 @@ public final class HttpRequest {
         } catch (NumberFormatException e) {
             throw new HttpExceptions.BadRequest("Invalid Content-Length");
         }
+        body = HttpParser.readFixedBytes(in, contentLength);
     }
 
-    // 5. Read body
-    byte[] body = new byte[0];
-    if (contentLength != null && contentLength > 0) {
-      body = HttpParser.readFixedBytes(in, contentLength);
-    }
+    // byte[] body = new byte[0];
+    // if (contentLength != null && contentLength > 0) {
+    //   body = HttpParser.readFixedBytes(in, contentLength);
+    // }
     return new HttpRequest(method, target, version, headers, body);
 
   }

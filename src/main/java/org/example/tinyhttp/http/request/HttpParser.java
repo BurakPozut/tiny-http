@@ -50,4 +50,59 @@ public final class HttpParser {
         }
         return buff;
     }
+
+    public static byte[] readChunkedBody(BufferedInputStream in, int maxTotal) throws IOException, HttpExceptions.BadRequest {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        int total = 0;
+
+        while(true){
+            // 1) Read chunk-size line: hex [; extensions] CRLF
+            String line = readLineCRLF(in,8192);
+            if (line == null) throw new IOException("EOF before chunk size");
+            int semi = line.indexOf(";"); // Ignore extentions
+            String hex = (semi > 0) ? line.substring(0, semi) : line;
+            hex = hex.trim();
+            if(hex.isEmpty()) throw new HttpExceptions.BadRequest("Empty chunk size");
+
+            int size;
+            try {
+                // disallow negative & very large
+                long val = Long.parseLong(hex, 16);
+                if(val < 0 || val > Integer.MAX_VALUE) throw new NumberFormatException(); // TODO Add this error format to catches
+                size = (int) val;
+            } catch (Exception e) {
+                throw new HttpExceptions.BadRequest("Bad chunk size: " + hex);
+            }
+
+            // 2) last chunk?
+            if(size == 0){
+                // read and ignore trailers until blank line
+                while(true){
+                    String t = readLineCRLF(in, 8192);
+                    if(t == null) throw new IOException("EOF in trailers");
+                    if(t.isEmpty()) break;
+                }
+                break; // done
+            }
+            
+            // 3) Read excatly 'size' bytes then CRLF
+            if(total + size > maxTotal){
+                throw new HttpExceptions.BadRequest("Body too Large");
+            }
+
+            byte[] buf = in.readNBytes(size);
+            if(buf.length != size) throw new IOException("EOF in chunked data");
+            out.write(buf);
+            total += size;
+
+            // expect CRLF after each chunk
+            int c1 = in.read(), c2 = in.read();
+            if(c1 != '\r'|| c2 != '\n'){
+                throw new  HttpExceptions.BadRequest("Missing CRLF after chunk");
+            }
+
+        }
+        return out.toByteArray();
+
+    }
 }

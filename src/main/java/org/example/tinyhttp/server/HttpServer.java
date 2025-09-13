@@ -248,12 +248,21 @@ public final class HttpServer {
  * Step 7 — Router & URL parsing
  * 
  * 
-# Test HEAD requests
-curl -I -H "Host: localhost" "http://localhost:8080/hello"
+# Normal Post
+curl -v --http1.1 \
+  -H "Host: localhost" \
+  -H "Content-Type: text/plain" \
+  --data "Hello World" \
+  http://localhost:8080/echo
 
-# Test OPTIONS requests  
-curl -i -X OPTIONS -H "Host: localhost" "http://localhost:8080/hello"
+  Chunked body (curl auto-chunking via stdin)
+  printf 'Hello World' | curl -v --http1.1 \
+  -H "Host: localhost" \
+  -H "Content-Type: text/plain" \
+  --data-binary @- \
+  http://localhost:8080/echo
 
-# Test method validation (405 Method Not Allowed)
-curl -i -X PUT -H "Host: localhost" "http://localhost:8080/hello"
+  Bad Chunk Size
+  printf 'POST /echo HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\nZ\r\nhi\r\n0\r\n\r\n' \
+| nc -w 1 localhost 8080
  */
