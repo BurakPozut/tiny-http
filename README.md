@@ -51,7 +51,7 @@ curl http://localhost:8080
 tiny-http/
 ├── src/
 │   ├── main/java/org/example/tinyhttp/
-│   │   └── Main.java          # Main server implementation
+│   │   └── HttpServer.java          # Main server implementation
 │   └── test/java/org/example/
 │       └── AppTest.java       # Unit tests
 ├── pom.xml                    # Maven configuration
@@ -87,15 +87,19 @@ This project demonstrates:
 
 ## 🔮 Future Enhancements
 
-Potential improvements for this project:
-
-- [ ] Multi-threaded client handling
-- [ ] HTTP request parsing and routing
+Core Features (Already Implemented):
+- [x] Multi-threaded client handling
+- [x] HTTP request parsing and routing
+- [x] HTTP response generation
+- [x] Basic error handling
+- [x] Keep-alive connections
+Future Enhancements:
 - [ ] Static file serving
-- [ ] HTTP response generation
 - [ ] Configuration file support
 - [ ] Logging framework integration
 - [ ] Performance metrics and monitoring
+- [ ] HTTPS support
+- [ ] Compression support
 
 ## 🤝 Contributing
 

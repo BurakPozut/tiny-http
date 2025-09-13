@@ -65,14 +65,12 @@ public final class HttpParser {
             if(hex.isEmpty()) throw new HttpExceptions.BadRequest("Empty chunk size");
 
             int size;
-            try {
-                // disallow negative & very large
-                long val = Long.parseLong(hex, 16);
-                if(val < 0 || val > Integer.MAX_VALUE) throw new NumberFormatException(); // TODO Add this error format to catches
-                size = (int) val;
-            } catch (Exception e) {
-                throw new HttpExceptions.BadRequest("Bad chunk size: " + hex);
-            }
+        
+            // disallow negative & very large
+            long val = Long.parseLong(hex, 16);
+            if(val < 0 || val > Integer.MAX_VALUE) throw new HttpExceptions.BadRequest("Chunk size too large");
+            size = (int) val;
+            
 
             // 2) last chunk?
             if(size == 0){
