@@ -1,4 +1,4 @@
-package org.example.tinyhttp.server;
+package org.example.tinyhttp.logging;
 
 import java.time.Instant;
 import java.time.ZoneOffset;

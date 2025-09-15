@@ -1,4 +1,4 @@
-package org.example.tinyhttp.server;
+package org.example.tinyhttp.util;
 
 import java.util.UUID;
 
