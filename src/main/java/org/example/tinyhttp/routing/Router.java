@@ -47,6 +47,7 @@ public final class Router {
   public Router post(String pattern, RouteHandler h){ routes.add(new Route("POST", pattern, h)); return this;}
   public Router head(String pattern, RouteHandler h) { routes.add(new Route("HEAD", pattern, h)); return this;}
   public Router options(String pattern, RouteHandler h) { routes.add(new Route("OPTIONS", pattern, h)); return this;}
+  public Router put(String pattern, RouteHandler h){ routes.add(new Route("PUT", pattern, h)); return this;}
 
 
   public Optional<Match> find(String method, String path){

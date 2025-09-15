@@ -84,7 +84,7 @@ public class UrlParser {
     if(raw == null || raw.isEmpty()) return map;
     int pairs = 0;
     for(String part: raw.split("&", -1)){
-      if(pairs++ > 1000) throw new IOException("too many request params");
+      if(++pairs > 1000) throw new IOException("too many request params");
       String k,v;
       int eq = part.indexOf("=");
       if(eq < 0) { k = part; v = "";}

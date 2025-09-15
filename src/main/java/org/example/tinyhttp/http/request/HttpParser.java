@@ -66,6 +66,8 @@ public final class HttpParser {
 
             int size;
         
+            if(!isValidHex(hex))
+                throw new HttpExceptions.BadRequest("Invalid chunk size");
             // disallow negative & very large
             long val = Long.parseLong(hex, 16);
             if(val < 0 || val > Integer.MAX_VALUE) throw new HttpExceptions.BadRequest("Chunk size too large");
@@ -102,5 +104,17 @@ public final class HttpParser {
         }
         return out.toByteArray();
 
+    }
+
+    private static boolean isValidHex(String hex) {
+        if (hex == null || hex.isEmpty()) return false;
+        for (char c : hex.toCharArray()) {
+            if (!((c >= '0' && c <= '9') || 
+                  (c >= 'A' && c <= 'F') || 
+                  (c >= 'a' && c <= 'f'))) {
+                return false;
+            }
+        }
+        return true;
     }
 }

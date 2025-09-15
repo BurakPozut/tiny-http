@@ -36,7 +36,7 @@ public final class HttpRequest {
   public HttpHeaders getHeaders() { return headers; }
   public byte[] getBody() { return body; }
 
-  public static HttpRequest parse(BufferedInputStream in) throws IOException {
+public static HttpRequest parse(BufferedInputStream in) throws IOException {
     // Read Request Line
     String requestLine = HttpParser.readLineCRLF(in, MAX_REQUEST_LINE_BYTES);
     
@@ -44,7 +44,7 @@ public final class HttpRequest {
       throw new HttpExceptions.BadRequest("Empty Request Line");
     
     // Split into METHOD, TARGET, VERSION
-    String[] parts = requestLine.split(" ", 3);
+    String[] parts = requestLine.split(" ");
     if (parts.length != 3) 
       throw new HttpExceptions.BadRequest("Malformed Request Line");
     
@@ -91,7 +91,6 @@ public final class HttpRequest {
             throw new HttpExceptions.NotImplemented("Transfer-Encoding not supported: " + te);
         }
         body = readChunkedBody(in, MAX_TARGET_LENGTH);
-        
     }
     // if (te != null && !te.equalsIgnoreCase("identity"))
     //     throw new HttpExceptions.NotImplemented("Transfer-Encoding not implemented");
@@ -140,9 +139,10 @@ public final class HttpRequest {
             throw new HttpExceptions.BadRequest("Obsolete header folding not allowed");
 
         int colon = line.indexOf(':');
-        if (colon <= 0)
+        if (colon < 0)
             throw new HttpExceptions.BadRequest("Malformed header (missing colon)");
-
+        if(colon == 0)
+            throw new HttpExceptions.BadRequest("Malformed header (missing name)");
         String name = line.substring(0, colon).trim();
         String value = line.substring(colon + 1).trim();
         if (name.isEmpty())
