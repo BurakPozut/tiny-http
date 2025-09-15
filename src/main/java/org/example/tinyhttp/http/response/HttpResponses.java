@@ -7,6 +7,7 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 
+import org.example.tinyhttp.http.request.RequestMetrics;
 import org.example.tinyhttp.server.HttpServer;
 
 public final class HttpResponses {
@@ -34,6 +35,11 @@ public final class HttpResponses {
       .append("Server: ").append(SERVER_NAME).append("\r\n")
       .append("Content-Type: text/plain; charset=utf-8\r\n")
       .append("Content-Length: ").append(body.length).append("\r\n");
+
+      var m = RequestMetrics.get();
+      if(m != null && m.requestId != null){
+        sb.append("X-REQUEST-ID: ").append(m.requestId).append("\r\n");
+      }
 
       if(extraHeaders != null){
         for(String[] h : extraHeaders){
@@ -73,6 +79,11 @@ public final class HttpResponses {
       .append("Content-Type: ").append(contentType).append("\r\n")
       .append("Content-Length: ").append(body.length).append("\r\n");
 
+      var m = RequestMetrics.get();
+      if(m != null && m.requestId != null){
+        sb.append("X-REQUEST-ID: ").append(m.requestId).append("\r\n");
+      }
+
     if(keepAlive){
       sb.append("Connection: keep-alive\r\n")
         .append("Keep-Alive: timeout=").append(HttpServer.KEEP_ALIVE_IDLE_TIMEOUT_MS / 1000)
@@ -95,6 +106,12 @@ public final class HttpResponses {
     .append("Server: ").append(SERVER_NAME).append("\r\n")
     .append("Content-Type: ").append(contentType).append("\r\n")
     .append("Content-Length: ").append(length).append("\r\n");
+
+    var m = RequestMetrics.get();
+      if(m != null && m.requestId != null){
+        sb.append("X-REQUEST-ID: ").append(m.requestId).append("\r\n");
+      }
+
     if (keepAlive) {
       sb.append("Connection: keep-alive\r\n")
         .append("Keep-Alive: timeout=").append(HttpServer.KEEP_ALIVE_IDLE_TIMEOUT_MS / 1000)

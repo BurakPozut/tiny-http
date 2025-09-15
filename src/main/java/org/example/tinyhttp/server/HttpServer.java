@@ -21,6 +21,7 @@ import org.example.tinyhttp.http.HttpExceptions.HttpVersionNotSupported;
 import org.example.tinyhttp.http.HttpExceptions.LineTooLong;
 import org.example.tinyhttp.http.HttpExceptions.NotImplemented;
 import org.example.tinyhttp.http.request.HttpRequest;
+import org.example.tinyhttp.http.request.RequestMetrics;
 import org.example.tinyhttp.http.response.HttpErrorHandler;
 import org.example.tinyhttp.http.response.HttpResponses;
 import org.example.tinyhttp.parsing.Url;
@@ -41,6 +42,8 @@ public final class HttpServer {
 
   public static final int KEEP_ALIVE_IDLE_TIMEOUT_MS = 5000;  // idle gap between requests
   public static final int MAX_REQUESTS_PER_CONN      = 100;   // safety cap
+
+  public static final int HEADER_READ_TIMEOUT_MS = 3000;
 
   private HttpServer() {}
 
@@ -114,92 +117,114 @@ public final class HttpServer {
 
   private static void handle(Socket client) {
       try(client) {
-          OutputStream out = client.getOutputStream();
-          BufferedInputStream bufferedIn = new BufferedInputStream(client.getInputStream());
+        OutputStream out = client.getOutputStream();
+        BufferedInputStream bufferedIn = new BufferedInputStream(client.getInputStream());
 
-          int served = 0;
-          boolean keepAlive = true;
+        int served = 0;
+        boolean keepAlive = true;
 
-          client.setSoTimeout(KEEP_ALIVE_IDLE_TIMEOUT_MS);
+        String requestId = Ids.requestId();
+        // client.setSoTimeout(KEEP_ALIVE_IDLE_TIMEOUT_MS);
+        client.setSoTimeout(HEADER_READ_TIMEOUT_MS);
 
-          while(keepAlive && served < MAX_REQUESTS_PER_CONN){
-              keepAlive = false; // Start pessimistic, set to true only on success
+        long statNs = System.nanoTime();
+        RequestMetrics.set(new RequestMetrics(requestId, "?", "?", 
+        client.getInetAddress().getHostAddress() + ":" + client.getPort(), statNs));
 
-              try {
-                  HttpRequest request = HttpRequest.parse(bufferedIn);
-                  served++;
+        while(keepAlive && served < MAX_REQUESTS_PER_CONN){
+          keepAlive = false; // Start pessimistic, set to true only on success
 
-                  // Expect: 100-continue (ack before reading body if your parser defers body)
-                  String expect = request.getHeaders().first("expect");
-                  if(expect != null && expect.equalsIgnoreCase("100-continue")){
-                      out.write("HTTP/1.1 100 Continue\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
-                      out.flush();
-                  }
+          try {
+            HttpRequest request = HttpRequest.parse(bufferedIn);
+            String incomingId = request.getHeaders().first("x-request-id");
+            if(incomingId != null && !incomingId.isBlank()){
+              var m = RequestMetrics.get();
+              if( m != null) { m.requestId = incomingId.trim();}
+            }
+            var m = RequestMetrics.get();
+            if( m != null){
+              m.method = request.getMethod();
+            }
 
-                  // Decide connection semantics for THIS response
-                  String connHeader = request.getHeaders().first("connection");
-                  boolean clientWantsClose = connHeader != null && connHeader.equalsIgnoreCase("close");
-                  boolean serverWantsClose = false;
+            client.setSoTimeout(KEEP_ALIVE_IDLE_TIMEOUT_MS);
+            served++;
 
-                  boolean keepThisResponseAlive = !clientWantsClose && !serverWantsClose && (served < MAX_REQUESTS_PER_CONN);
+            // Expect: 100-continue (ack before reading body if your parser defers body)
+            String expect = request.getHeaders().first("expect");
+            if(expect != null && expect.equalsIgnoreCase("100-continue")){
+                out.write("HTTP/1.1 100 Continue\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
+                out.flush();
+            }
+            // Decide connection semantics for THIS response
+            String connHeader = request.getHeaders().first("connection");
+            boolean clientWantsClose = connHeader != null && connHeader.equalsIgnoreCase("close");
+            boolean serverWantsClose = false;
 
+            boolean keepThisResponseAlive = !clientWantsClose && !serverWantsClose && (served < MAX_REQUESTS_PER_CONN);
 
-                  try {
-                    // --- build Url from target ---
-                    String[] pq = UrlParser.splitPathAndQuery(request.getTarget());
-                    String rawPath  = pq[0];
-                    String rawQuery = pq[1];
-                
-                    String normPath = UrlParser.normalizePath(rawPath);
-                    var query = UrlParser.parseQuery(rawQuery);
-                    Url url = new Url(request.getTarget(), normPath, query);
-                
-                    // --- route match ---
-                    // If the method is Options we dont need to look at anything else
-                    if("OPTIONS".equals(request.getMethod())){
-                      handleOptionsRequest(url, out, keepAlive);
-                      continue;
-                    }
-                    var match = ROUTER.find(request.getMethod(), url.path());
-                    if (match.isPresent()) {
-                      RequestContext ctx = new RequestContext(request, url, match.get().pathVars);
-                      if ("HEAD".equals(request.getMethod())) {
-                        ResponseMetaData meta = match.get().handler.getMetaData(ctx);
-                        HttpResponses.writeHEAD(out, 200, "OK", meta.contentType, meta.contentLength, keepThisResponseAlive);
-                      } else {
-                          // Normal GET, POST, etc.
-                          match.get().handler.handle(ctx, out, keepThisResponseAlive);
-                      }
-                    } else {
-                      handleNoMatchFound(client, url, out);
-                    }
-                  } catch (IOException badUrl) {
-                    // normalizePath / pctDecode / parseQuery errors → 400 and close
-                    HttpErrorHandler.sendBadRequest(client, badUrl.getMessage());
-                    keepThisResponseAlive = false;
-                  }
-                  // Next iteration: keep the loop only if we kept this response alive
-                  keepAlive = keepThisResponseAlive;
-              } catch (BadRequest e) {
-                HttpErrorHandler.sendBadRequest(client, e.getMessage());
-              } catch (HeaderTooLarge e) {
-                HttpErrorHandler.sendHeaderTooLarge(client, e.getMessage());
-              } catch (NotImplemented e) {
-                HttpErrorHandler.sendNotImplemented(client, e.getMessage());
-              } catch (HttpVersionNotSupported e) {
-                HttpErrorHandler.sendHttpVersionNotSupported(client, e.getMessage());
-              } catch (LineTooLong e) {
-                HttpErrorHandler.sendLineTooLong(client, e.getMessage());
-              } catch (IOException ioe) {
-                System.err.println("[tiny-http] io error: " + ioe.getMessage());
-                // best-effort error response only if stream still usable (optional)
-              } catch(Exception e){
-                HttpErrorHandler.sendInternalServerError(client, "oops");
+            try {
+              // --- build Url from target ---
+              String[] pq = UrlParser.splitPathAndQuery(request.getTarget());
+              String rawPath  = pq[0];
+              String rawQuery = pq[1];
+          
+              String normPath = UrlParser.normalizePath(rawPath);
+              var query = UrlParser.parseQuery(rawQuery);
+              Url url = new Url(request.getTarget(), normPath, query);
+
+              var mx = RequestMetrics.get();
+              if(mx != null)
+                mx.path = url.path();
+
+              // --- route match ---
+              // If the method is Options we dont need to look at anything else
+              if("OPTIONS".equals(request.getMethod())){
+                handleOptionsRequest(url, out, keepAlive);
+                continue;
               }
+              var match = ROUTER.find(request.getMethod(), url.path());
+              if (match.isPresent()) {
+                RequestContext ctx = new RequestContext(request, url, match.get().pathVars);
+                if ("HEAD".equals(request.getMethod())) {
+                  ResponseMetaData meta = match.get().handler.getMetaData(ctx);
+                  HttpResponses.writeHEAD(out, 200, "OK", meta.contentType, meta.contentLength, keepThisResponseAlive);
+                } else {
+                    // Normal GET, POST, etc.
+                    match.get().handler.handle(ctx, out, keepThisResponseAlive);
+                }
+              } else {
+                handleNoMatchFound(client, url, out);
+              }
+            } catch (IOException badUrl) {
+              // normalizePath / pctDecode / parseQuery errors → 400 and close
+              HttpErrorHandler.sendBadRequest(client, badUrl.getMessage());
+              keepThisResponseAlive = false;
+            }
+            // Next iteration: keep the loop only if we kept this response alive
+            keepAlive = keepThisResponseAlive;
+            AccessLog.log(RequestMetrics.get());
+          } catch (BadRequest e) {
+            HttpErrorHandler.sendBadRequest(client, e.getMessage());
+          } catch (HeaderTooLarge e) {
+            HttpErrorHandler.sendHeaderTooLarge(client, e.getMessage());
+          } catch (NotImplemented e) {
+            HttpErrorHandler.sendNotImplemented(client, e.getMessage());
+          } catch (HttpVersionNotSupported e) {
+            HttpErrorHandler.sendHttpVersionNotSupported(client, e.getMessage());
+          } catch (LineTooLong e) {
+            HttpErrorHandler.sendLineTooLong(client, e.getMessage());
+          } catch (IOException ioe) {
+            System.err.println("[tiny-http] io error: " + ioe.getMessage());
+            // best-effort error response only if stream still usable (optional)
+          } catch(Exception e){
+            HttpErrorHandler.sendInternalServerError(client, "oops");
           }
+        }
       } catch(IOException e){
         // Socket-level errors (connection issues, etc.)
         System.err.println("[tiny-http] socket error: " + e.getMessage());
+      } finally{
+        RequestMetrics.cler();
       }
   }
 
