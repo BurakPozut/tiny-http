@@ -8,7 +8,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 
 import org.example.tinyhttp.http.request.RequestMetrics;
-import org.example.tinyhttp.server.HttpServer;
+import org.example.tinyhttp.server.HttpServerConstants;
 
 public final class HttpResponses {
   private HttpResponses() {}
@@ -51,8 +51,8 @@ public final class HttpResponses {
 
     if(keepAlive){
       sb.append("Connection: keep-alive\r\n")
-      .append("Keep-Alive: timeout=").append(HttpServer.KEEP_ALIVE_IDLE_TIMEOUT_MS / 1000)
-      .append(", max=").append(HttpServer.MAX_REQUESTS_PER_CONN).append("\r\n");
+      .append("Keep-Alive: timeout=").append(HttpServerConstants.KEEP_ALIVE_IDLE_TIMEOUT_MS / 1000)
+      .append(", max=").append(HttpServerConstants.MAX_REQUESTS_PER_CONN).append("\r\n");
     } else{
       sb.append("Connection: close\r\n");
     }
@@ -86,8 +86,8 @@ public final class HttpResponses {
 
     if(keepAlive){
       sb.append("Connection: keep-alive\r\n")
-        .append("Keep-Alive: timeout=").append(HttpServer.KEEP_ALIVE_IDLE_TIMEOUT_MS / 1000)
-        .append(", max=").append(HttpServer.MAX_REQUESTS_PER_CONN).append("\r\n");
+        .append("Keep-Alive: timeout=").append(HttpServerConstants.KEEP_ALIVE_IDLE_TIMEOUT_MS / 1000)
+        .append(", max=").append(HttpServerConstants.MAX_REQUESTS_PER_CONN).append("\r\n");
     } else{
       sb.append("Connection: close\r\n");
     }
@@ -114,8 +114,8 @@ public final class HttpResponses {
 
     if (keepAlive) {
       sb.append("Connection: keep-alive\r\n")
-        .append("Keep-Alive: timeout=").append(HttpServer.KEEP_ALIVE_IDLE_TIMEOUT_MS / 1000)
-        .append(", max=").append(HttpServer.MAX_REQUESTS_PER_CONN).append("\r\n");
+        .append("Keep-Alive: timeout=").append(HttpServerConstants.KEEP_ALIVE_IDLE_TIMEOUT_MS / 1000)
+        .append(", max=").append(HttpServerConstants.MAX_REQUESTS_PER_CONN).append("\r\n");
     } else {
         sb.append("Connection: close\r\n");
     }
