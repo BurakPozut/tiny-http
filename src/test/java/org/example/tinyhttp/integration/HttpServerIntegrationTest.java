@@ -3,6 +3,7 @@ package org.example.tinyhttp.integration;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.ServerSocket;
+import java.net.URI;
 import java.net.URL;
 
 import org.example.tinyhttp.routing.Router;
@@ -74,7 +75,7 @@ public class HttpServerIntegrationTest {
 
     @Test
     void testGetHello() throws IOException {
-        URL url = new URL(baseUrl + "/hello");
+        URL url = URI.create(baseUrl + "/hello").toURL();
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("GET");
         connection.setConnectTimeout(5000);
@@ -99,7 +100,7 @@ public class HttpServerIntegrationTest {
     
     @Test
     void testGetHelloWithName() throws IOException {
-        URL url = new URL(baseUrl + "/hello?name=TestUser");
+        URL url = URI.create(baseUrl + "/hello?name=TestUser").toURL();
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("GET");
         connection.setConnectTimeout(5000);
@@ -114,7 +115,7 @@ public class HttpServerIntegrationTest {
     
     @Test
     void testGetUsersWithId() throws IOException {
-        URL url = new URL(baseUrl + "/users/123");
+        URL url = URI.create(baseUrl + "/users/123").toURL();
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("GET");
         connection.setConnectTimeout(5000);
@@ -129,7 +130,7 @@ public class HttpServerIntegrationTest {
     
     @Test
     void testPostEcho() throws IOException {
-        URL url = new URL(baseUrl + "/echo");
+        URL url = URI.create(baseUrl + "/echo").toURL();
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("POST");
         connection.setRequestProperty("Content-Type", "text/plain");
@@ -149,7 +150,7 @@ public class HttpServerIntegrationTest {
     
     @Test
     void testNotFound() throws IOException {
-        URL url = new URL(baseUrl + "/nonexistent");
+        URL url = URI.create(baseUrl + "/nonexistent").toURL();
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("GET");
         connection.setConnectTimeout(5000);
@@ -161,7 +162,7 @@ public class HttpServerIntegrationTest {
     
     @Test
     void testMethodNotAllowed() throws IOException {
-        URL url = new URL(baseUrl + "/hello");
+        URL url = URI.create(baseUrl + "/hello").toURL();
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("DELETE");
         connection.setConnectTimeout(5000);

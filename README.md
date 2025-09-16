@@ -1,5 +1,8 @@
 # Tiny HTTP Server 🚀
 
+[![codecov](https://codecov.io/gh/BurakPozut/tiny-http/branch/main/graph/badge.svg)](https://codecov.io/gh/BurakPozut/tiny-http)
+[![CI](https://github.com/BurakPozut/tiny-http/workflows/CI/badge.svg)](https://github.com/BurakPozut/tiny-http/actions)
+
 A lightweight, single-threaded HTTP server implementation in Java that demonstrates core networking concepts and HTTP protocol handling.
 
 ## ✨ Features
