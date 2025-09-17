@@ -123,7 +123,7 @@ public final class HttpResponses {
 
   public static void writeJson(OutputStream out, int status, String reason, Object bodyObj,
     boolean keepAlive, String[][] extraHeaders) throws IOException {
-      
+
     byte[] body = Json.mapper.writeValueAsBytes(bodyObj);
 
     StringBuilder sb = new StringBuilder(256);

@@ -1,8 +1,6 @@
 package org.example.tinyhttp.server;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
 import org.example.tinyhttp.http.request.Accepts;
 import org.example.tinyhttp.http.response.HttpResponses;
@@ -14,20 +12,7 @@ import org.example.tinyhttp.routing.Router;
 public final class HttpServer {
   private static final int PORT = 8080;
 
-  // Concurrency / socket tuning
-  // private static final int ACCEPT_BACKLOG         = 128; // pending connections OS queue
-  // private static final int WORKER_THREADS         = Math.max(2, Runtime.getRuntime().availableProcessors());
-  // private static final int QUEUE_CAPACITY         = 256; // backpressure; reject beyond this
-  // private static final int SOCKET_READ_TIMEOUT_MS = 10_000; // per-connection read timeout
-
-  // public static final int KEEP_ALIVE_IDLE_TIMEOUT_MS = 5000;  // idle gap between requests
-  // public static final int MAX_REQUESTS_PER_CONN      = 100;   // safety cap
-
-  // public static final int HEADER_READ_TIMEOUT_MS = 3000;
-
   private HttpServer() {}
-
-  // private static volatile boolean running = true;
 
   public static void main(String[] args) {
     System.out.println("[tiny-http] listening on http://localhost:" + PORT);
@@ -63,9 +48,9 @@ public final class HttpServer {
         String name = ctx.query("name");
         String msg = (name == null) ? "Hello World" : ("Hello " + name);
         if(Accepts.wantsJson(ctx.request().getHeaders())) {
-          Map<String, String> responseBody = new HashMap<>();
-          responseBody.put("message", msg);
-          HttpResponses.writeJson(out, 200, "OK", responseBody, keepAlive, null);
+          // Map<String,Object> json = java.util.Map.of("message", msg);
+          var json = Json.createResponse("message", name);
+          HttpResponses.writeJson(out, 200, "OK", json, keepAlive, null);
         }
         else{
           HttpResponses.writeText(out, 200, "OK", msg + "\n", keepAlive);
@@ -73,17 +58,17 @@ public final class HttpServer {
       })
       .get("/users/:id", (ctx, out, keepAlive) -> {
         String id = ctx.pathVars("id"); // Already decoded
-        if(Accepts.wantsJson(ctx.request().getHeaders())) {
-
-        }
-        HttpResponses.writeText(out, 200, "OK", "user " + id + "\n", keepAlive);
+        var json = Json.createResponse("id", id);
+        
+        HttpResponses.writeJson(out, 200, "OK", json, keepAlive, null);
       })
       .post("/echo", (ctx, out, keepAlive) -> {
         String ct = ctx.request().getHeaders().first("content-type", "application/octet-stream");
         if(Accepts.wantsJson(ctx.request().getHeaders())){
           var node = Json.mapper.readTree(ctx.request().getBody());
           HttpResponses.writeJson(out, 200, "OK", node, keepAlive, null);
-        } else{
+        } 
+        else{
           HttpResponses.writeRaw(out, 200, "OK", ct, ctx.request().getBody(), keepAlive);
         }
       }).options("*", (ctx, out, keepAlive) -> {
@@ -95,24 +80,15 @@ public final class HttpServer {
 }
 
 /*
- * Step 7 — Router & URL parsing
+ * Step 11 - Json handling
+ * The server returns JSON as defualt now only in /hello endpoint has a text response
+ * 
+ * To Test json retun:
+ * curl -i -H 'Accept: application/json' 'http://localhost:8080/hello?name=Burak'
+ * 
+ * To test text return just delete accept
+ * 
+ * curl -i 'http://localhost:8080/hello?name=Burak'
  * 
  * 
-# Normal Post
-curl -v --http1.1 \
-  -H "Host: localhost" \
-  -H "Content-Type: text/plain" \
-  --data "Hello World" \
-  http://localhost:8080/echo
-
-  Chunked body (curl auto-chunking via stdin)
-  printf 'Hello World' | curl -v --http1.1 \
-  -H "Host: localhost" \
-  -H "Content-Type: text/plain" \
-  --data-binary @- \
-  http://localhost:8080/echo
-
-  Bad Chunk Size
-  printf 'POST /echo HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\nZ\r\nhi\r\n0\r\n\r\n' \
-| nc -w 1 localhost 8080
  */
