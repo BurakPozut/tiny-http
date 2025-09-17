@@ -22,6 +22,7 @@ public class HttpServerIntegrationTest {
     private static String baseUrl;
     
     @BeforeAll
+    @SuppressWarnings("unused")
     static void startServer() throws IOException {
         // Find a free port
         try (ServerSocket socket = new ServerSocket(0)) {
@@ -46,6 +47,7 @@ public class HttpServerIntegrationTest {
     }
     
     @AfterAll
+    @SuppressWarnings("unused")
     static void stopServer() {
         if (server != null) {
             server.stop();

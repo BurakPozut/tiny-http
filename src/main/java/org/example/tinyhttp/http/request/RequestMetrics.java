@@ -6,8 +6,9 @@ public final class RequestMetrics {
   public String path;
   public final String remote;
   public final long startNs;
-  public final int status = -1; //Set by HttpResponses when writing
-  public final long contentLength = -1; //Set by HttpResponses when writing
+  public int status = -1; //Set by HttpResponses when writing
+  public long contentLength = -1; //Set by HttpResponses when writing
+  public boolean prefersJson = false;
 
   public RequestMetrics(String requstId, String method, String path, String remote, long startNs) {
     this.requestId = requstId;
@@ -20,5 +21,5 @@ public final class RequestMetrics {
   private static final ThreadLocal<RequestMetrics> TL = new ThreadLocal<>();
   public static void set(RequestMetrics m ) { TL.set(m); }
   public static RequestMetrics get(){ return TL.get(); }
-  public static void cler() { TL.remove(); }
+  public static void clear() { TL.remove(); }
 }

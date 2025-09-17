@@ -3,6 +3,8 @@ package org.example.tinyhttp.http.response;
 import java.io.IOException;
 import java.net.Socket;
 
+import org.example.tinyhttp.http.request.RequestMetrics;
+
 public final class HttpErrorHandler {
   private HttpErrorHandler(){}
 
@@ -12,11 +14,16 @@ public final class HttpErrorHandler {
     sendErrorResponse(client, status, reason, message, null);
   }
 
-  public static void sendErrorResponse(Socket client, int status, String reason, String message, String[][] extraHeaders){
+  public static void sendErrorResponse(Socket client, int status, String reason, String message, 
+    String[][] extraHeaders){
     try {
       if (client.isClosed() || client.isOutputShutdown()) {
         System.err.println("[DEBUG] Socket closed, skipping error response");
         return;
+      }
+      var m = RequestMetrics.get();
+      if(m.prefersJson){
+        HttpResponses.writeJson(client.getOutputStream(), status, reason, new ErrorEnvelope(status, message, m.requestId), false, null);
       }
       HttpResponses.writeText(client.getOutputStream(), status, reason, message, false, extraHeaders);
     } catch (IOException ignored) {

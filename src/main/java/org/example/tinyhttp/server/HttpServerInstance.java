@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.example.tinyhttp.context.RequestContext;
 import org.example.tinyhttp.http.HttpExceptions;
+import org.example.tinyhttp.http.request.Accepts;
 import org.example.tinyhttp.http.request.HttpRequest;
 import org.example.tinyhttp.http.request.RequestMetrics;
 import org.example.tinyhttp.http.response.HttpErrorHandler;
@@ -156,15 +157,17 @@ public class HttpServerInstance {
           try {
             HttpRequest request = HttpRequest.parse(bufferedIn);
             String incomingId = request.getHeaders().first("x-request-id");
-            if(incomingId != null && !incomingId.isBlank()){
-              var m = RequestMetrics.get();
-              if( m != null) { m.requestId = incomingId.trim();}
-            }
             var m = RequestMetrics.get();
-            if( m != null){
-              m.method = request.getMethod();
-            }
 
+            if(m != null){
+              if(incomingId != null && !incomingId.isBlank()){
+                m.requestId = incomingId.trim();
+              }
+              m.method = request.getMethod();
+              // Check Accept header
+              boolean accept = Accepts.wantsJson(request.getHeaders());
+              m.prefersJson = accept;
+            }
             client.setSoTimeout(KEEP_ALIVE_IDLE_TIMEOUT_MS);
             served++;
 
@@ -243,7 +246,7 @@ public class HttpServerInstance {
         // Socket-level errors (connection issues, etc.)
         System.err.println("[tiny-http] socket error: " + e.getMessage());
       } finally{
-        RequestMetrics.cler();
+        RequestMetrics.clear();
       }
   }
 

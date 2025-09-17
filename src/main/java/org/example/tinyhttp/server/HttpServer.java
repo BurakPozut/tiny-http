@@ -1,8 +1,12 @@
 package org.example.tinyhttp.server;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
+import org.example.tinyhttp.http.request.Accepts;
 import org.example.tinyhttp.http.response.HttpResponses;
+import org.example.tinyhttp.parsing.Json;
 import org.example.tinyhttp.routing.Router;
 
 
@@ -57,16 +61,31 @@ public final class HttpServer {
     return new Router()
       .get("/hello", (ctx, out, keepAlive) -> {
         String name = ctx.query("name");
-        String msg = (name == null) ? "Hello World\n" : ("Hello " + name + "\n");
-        HttpResponses.writeText(out, 200, "OK", msg, keepAlive);
+        String msg = (name == null) ? "Hello World" : ("Hello " + name);
+        if(Accepts.wantsJson(ctx.request().getHeaders())) {
+          Map<String, String> responseBody = new HashMap<>();
+          responseBody.put("message", msg);
+          HttpResponses.writeJson(out, 200, "OK", responseBody, keepAlive, null);
+        }
+        else{
+          HttpResponses.writeText(out, 200, "OK", msg + "\n", keepAlive);
+        }
       })
       .get("/users/:id", (ctx, out, keepAlive) -> {
         String id = ctx.pathVars("id"); // Already decoded
+        if(Accepts.wantsJson(ctx.request().getHeaders())) {
+
+        }
         HttpResponses.writeText(out, 200, "OK", "user " + id + "\n", keepAlive);
       })
       .post("/echo", (ctx, out, keepAlive) -> {
         String ct = ctx.request().getHeaders().first("content-type", "application/octet-stream");
-        HttpResponses.writeRaw(out, 200, "OK", ct, ctx.request().getBody(), keepAlive);
+        if(Accepts.wantsJson(ctx.request().getHeaders())){
+          var node = Json.mapper.readTree(ctx.request().getBody());
+          HttpResponses.writeJson(out, 200, "OK", node, keepAlive, null);
+        } else{
+          HttpResponses.writeRaw(out, 200, "OK", ct, ctx.request().getBody(), keepAlive);
+        }
       }).options("*", (ctx, out, keepAlive) -> {
         // Advertise what you generally support
         String allow = "GET,HEAD,POST,OPTIONS";
