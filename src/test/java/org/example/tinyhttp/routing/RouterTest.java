@@ -500,6 +500,7 @@ public class RouterTest {
   void testRouter_withPathVarsAndJson() {
       Router router = new Router();
       router.get("/users/:id", (ctx, out, keepAlive) -> {
+          @SuppressWarnings("unused")
           String id = ctx.pathVars("id");
           // This test verifies path variables work with JSON responses
       });
@@ -513,6 +514,7 @@ public class RouterTest {
   void testRouter_withQueryParamsAndJson() {
       Router router = new Router();
       router.get("/search", (ctx, out, keepAlive) -> {
+          @SuppressWarnings("unused")
           String query = ctx.query("q");
           // This test verifies query parameters work with JSON responses
       });
