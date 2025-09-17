@@ -9,6 +9,6 @@ public final class Accepts {
     String accept = h.first("accept");
     if(accept == null) return false;
     accept = accept.toLowerCase(Locale.ROOT);
-    return accept.contains("application/json");
+    return accept.contains("application/json") || accept.contains("*/*");
   }
 }

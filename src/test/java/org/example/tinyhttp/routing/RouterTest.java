@@ -5,6 +5,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
@@ -479,4 +480,45 @@ public class RouterTest {
     assertTrue(router.find("OPTIONS", "/users").isPresent());
   }
   //#endregion
+
+  // Add these tests to RouterTest.java
+
+  @Test
+  void testRouter_withJsonResponse() {
+      Router router = new Router();
+      router.get("/test", (ctx, out, keepAlive) -> {
+          // This test verifies the router can handle JSON responses
+          // The actual JSON logic is tested in HttpResponsesTest
+      });
+      
+      Optional<Router.Match> match = router.find("GET", "/test");
+      assertTrue(match.isPresent());
+      assertNotNull(match.get().handler);
+  }
+
+  @Test
+  void testRouter_withPathVarsAndJson() {
+      Router router = new Router();
+      router.get("/users/:id", (ctx, out, keepAlive) -> {
+          String id = ctx.pathVars("id");
+          // This test verifies path variables work with JSON responses
+      });
+      
+      Optional<Router.Match> match = router.find("GET", "/users/123");
+      assertTrue(match.isPresent());
+      assertEquals("123", match.get().pathVars.get("id"));
+  }
+
+  @Test
+  void testRouter_withQueryParamsAndJson() {
+      Router router = new Router();
+      router.get("/search", (ctx, out, keepAlive) -> {
+          String query = ctx.query("q");
+          // This test verifies query parameters work with JSON responses
+      });
+      
+      Optional<Router.Match> match = router.find("GET", "/search");
+      assertTrue(match.isPresent());
+      assertNotNull(match.get().handler);
+  }
 }

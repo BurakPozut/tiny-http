@@ -23,9 +23,10 @@ public final class HttpErrorHandler {
       }
       var m = RequestMetrics.get();
       if(m.prefersJson){
-        HttpResponses.writeJson(client.getOutputStream(), status, reason, new ErrorEnvelope(status, message, m.requestId), false, null);
+        HttpResponses.writeJson(client.getOutputStream(), status, reason, new ErrorEnvelope(status, message, m.requestId), false, extraHeaders);
+      } else{
+        HttpResponses.writeText(client.getOutputStream(), status, reason, message, false, extraHeaders);
       }
-      HttpResponses.writeText(client.getOutputStream(), status, reason, message, false, extraHeaders);
     } catch (IOException ignored) {
       System.err.println("[DEBUG] IOException in sendErrorResponse: " + ignored.getMessage());
       // ignored.printStackTrace();

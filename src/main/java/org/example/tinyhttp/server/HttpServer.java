@@ -64,7 +64,7 @@ public final class HttpServer {
       })
       .post("/echo", (ctx, out, keepAlive) -> {
         String ct = ctx.request().getHeaders().first("content-type", "application/octet-stream");
-        if(Accepts.wantsJson(ctx.request().getHeaders())){
+        if(Accepts.wantsJson(ctx.request().getHeaders()) && ct.contains("application/json")){
           var node = Json.mapper.readTree(ctx.request().getBody());
           HttpResponses.writeJson(out, 200, "OK", node, keepAlive, null);
         } 
