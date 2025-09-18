@@ -12,13 +12,13 @@ public final class Cors {
   // Policy
   // If we set the allowCredentails = true, we must not use * for origin
   // we must echo the request Origin when allowed
-  public static final boolean allowCredentials = false;
+  public static final boolean ALLOW_CREDENTIANLS = false;
 
   // Allow all origins by default
   private static final Set<String> allowedOrigins = Set.of("*");
 
   // Methods supported
-  private static final String allowedMethodsCsv = "GET,POST,HEAD,OPTIONS";
+  private static final String ALLOWED_METHODS_CSV = "GET,POST,HEAD,OPTIONS";
   
   // Which request headers we will accept from browsers (case-insenstive)
   private static final Set<String> allowedRequestHeaders = Set.of(
@@ -26,7 +26,7 @@ public final class Cors {
   );
 
   // Cache preflight result for this many seconds
-  private static final int maxAgeSeconds = 600;
+  private static final int MAX_AGE_SECONDS = 600;
 
   public static boolean isCorsPreflight(String method, HttpHeaders headers){
     if(!"OPTIONS".equalsIgnoreCase(method)) return false;
@@ -46,8 +46,8 @@ public final class Cors {
     list.add(new String[]{"Vary", "Access-Control-Request-Headers"});
     list.add(new String[]{"Vary", "Access-Control-Request-Method"});
     list.add(new String[]{"Access-Control-Allow-Origin", allowOrigin});
-    list.add(new String[]{"Access-Control-Allow-Methods", allowedMethodsCsv});
-    list.add(new String[]{"Access-Control-Max-Age", String.valueOf(maxAgeSeconds)});
+    list.add(new String[]{"Access-Control-Allow-Methods", ALLOWED_METHODS_CSV});
+    list.add(new String[]{"Access-Control-Max-Age", String.valueOf(MAX_AGE_SECONDS)});
 
     // If client asked to send specific headers, allow the intersection with our policy
     if(reqHeaders != null && !reqHeaders.isBlank()){
@@ -59,7 +59,7 @@ public final class Cors {
         list.add(new String[]{"Access-Control-Allow-Headers", String.join(",", allowedRequestHeaders)});
       }
     }
-    if(allowCredentials) list.add(new String[]{"Access-Control-Allow-Credentials", "true"});
+    if(ALLOW_CREDENTIANLS) list.add(new String[]{"Access-Control-Allow-Credentials", "true"});
     return list.toArray(String[][]::new);
   }
   
@@ -72,7 +72,7 @@ public final class Cors {
     List<String[]> list = new ArrayList<>();
     list.add(new String[]{"Vary", "Origin"});
     list.add(new String[]{"Access-Control-Allow-Origin", allowOrigin});
-    if(allowCredentials) list.add(new String[]{"Access-Control-Allow-Credentials", "true"});
+    if(ALLOW_CREDENTIANLS) list.add(new String[]{"Access-Control-Allow-Credentials", "true"});
     return list.toArray(String[][]::new);
   }
 
