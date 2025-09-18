@@ -1,0 +1,98 @@
+package org.example.tinyhttp.http.response;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+
+import org.example.tinyhttp.http.request.HttpHeaders;
+
+public final class Cors {
+  private Cors(){}
+  // Policy
+  // If we set the allowCredentails = true, we must not use * for origin
+  // we must echo the request Origin when allowed
+  public static final boolean allowCredentials = false;
+
+  // Allow all origins by default
+  private static final Set<String> allowedOrigins = Set.of("*");
+
+  // Methods supported
+  private static final String allowedMethodsCsv = "GET,POST,HEAD,OPTIONS";
+  
+  // Which request headers we will accept from browsers (case-insenstive)
+  private static final Set<String> allowedRequestHeaders = Set.of(
+    "content-type", "authorization", "x-request-id"
+  );
+
+  // Cache preflight result for this many seconds
+  private static final int maxAgeSeconds = 600;
+
+  public static boolean isCorsPreflight(String method, HttpHeaders headers){
+    if(!"OPTIONS".equalsIgnoreCase(method)) return false;
+    String origin = headers.first("origin");
+    String acrm = headers.first("access-control-request-method");
+    return origin != null && !origin.isBlank() && acrm != null && !acrm.isBlank();
+  }
+
+  //Build Headers for the preflight
+  public static String[][] preflightHeaders(HttpHeaders headers){
+    String origin = headers.first("origin");
+    String reqHeaders = headers.first("access-control-request-headers"); // raw, comma seperated
+
+    String allowOrigin = resolveAllowOrigin(origin);
+    List<String[]> list = new ArrayList<>();
+    list.add(new String[]{"Vary", "Origin"});
+    list.add(new String[]{"Vary", "Access-Control-Request-Headers"});
+    list.add(new String[]{"Vary", "Access-Control-Request-Method"});
+    list.add(new String[]{"Access-Control-Allow-Origin", allowOrigin});
+    list.add(new String[]{"Access-Control-Allow-Methods", allowedMethodsCsv});
+    list.add(new String[]{"Access-Control-Max-Age", String.valueOf(maxAgeSeconds)});
+
+    // If client asked to send specific headers, allow the intersection with our policy
+    if(reqHeaders != null && !reqHeaders.isBlank()){
+      String allowReq = filterRequestHeaders(reqHeaders);
+      if(allowReq.isBlank()){
+        list.add(new String[]{"Access-Control-Allow-Headers", allowReq});
+      } else {
+        // Or advertise the common set
+        list.add(new String[]{"Access-Control-Allow-Headers", String.join(",", allowedRequestHeaders)});
+      }
+    }
+    if(allowCredentials) list.add(new String[]{"Access-Control-Allow-Credentials", "true"});
+    return list.toArray(String[][]::new);
+  }
+  
+  // Build headers for the actual response (non-OPTIONS)
+  public static String[][] actualResponseHeaders(HttpHeaders headers) {
+    String origin = headers.first("origin");
+    if (origin == null || origin.isBlank()) return null; // not a CORS request
+
+    String allowOrigin = resolveAllowOrigin(origin);
+    List<String[]> list = new ArrayList<>();
+    list.add(new String[]{"Vary", "Origin"});
+    list.add(new String[]{"Access-Control-Allow-Origin", allowOrigin});
+    if(allowCredentials) list.add(new String[]{"Access-Control-Allow-Credentials", "true"});
+    return list.toArray(String[][]::new);
+  }
+
+  private static String resolveAllowOrigin(String origin){
+    if(allowedOrigins.contains("*")) return "*";
+
+    return allowedOrigins.contains(origin) ? origin : null;
+  }
+
+  private static String filterRequestHeaders(String reqHeadersCsv){
+    // Keep only those we allow; normalize to lowercase tokens
+    StringBuilder out = new StringBuilder();
+    for(String h: reqHeadersCsv.split(",")){
+      String t = h.trim().toLowerCase(Locale.ROOT);
+      if(t.isEmpty()) continue;
+      if(allowedRequestHeaders.contains(t)){
+        if(out.length() > 0) out.append(",");
+        out.append(t);
+      }
+    }
+    return out.toString();
+  }
+}

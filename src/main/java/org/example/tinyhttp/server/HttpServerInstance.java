@@ -19,6 +19,7 @@ import org.example.tinyhttp.http.HttpExceptions;
 import org.example.tinyhttp.http.request.Accepts;
 import org.example.tinyhttp.http.request.HttpRequest;
 import org.example.tinyhttp.http.request.RequestMetrics;
+import org.example.tinyhttp.http.response.Cors;
 import org.example.tinyhttp.http.response.HttpErrorHandler;
 import org.example.tinyhttp.http.response.HttpResponses;
 import org.example.tinyhttp.logging.AccessLog;
@@ -156,6 +157,16 @@ public class HttpServerInstance {
 
           try {
             HttpRequest request = HttpRequest.parse(bufferedIn);
+            // CORS preflight?
+            if(Cors.isCorsPreflight(request.getMethod(), request.getHeaders())){
+              System.out.println("In CORS Preflight check");
+              String[][] h = Cors.preflightHeaders(request.getHeaders());
+              // 204 No Content, Content-Lenght: 0
+              keepAlive = true;
+              HttpResponses.writeText(out, 204, "No Content", "", keepAlive, h);
+              continue;
+            }
+
             String incomingId = request.getHeaders().first("x-request-id");
             var m = RequestMetrics.get();
 
@@ -168,6 +179,7 @@ public class HttpServerInstance {
               boolean accept = Accepts.wantsJson(request.getHeaders());
               m.prefersJson = accept;
             }
+            
             client.setSoTimeout(KEEP_ALIVE_IDLE_TIMEOUT_MS);
             served++;
 

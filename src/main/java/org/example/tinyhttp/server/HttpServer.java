@@ -3,6 +3,7 @@ package org.example.tinyhttp.server;
 import java.io.IOException;
 
 import org.example.tinyhttp.http.request.Accepts;
+import org.example.tinyhttp.http.response.Cors;
 import org.example.tinyhttp.http.response.HttpResponses;
 import org.example.tinyhttp.parsing.Json;
 import org.example.tinyhttp.routing.Router;
@@ -47,40 +48,48 @@ public final class HttpServer {
       .get("/hello", (ctx, out, keepAlive) -> {
         String name = ctx.query("name");
         String msg = (name == null) ? "Hello World" : ("Hello " + name);
+        String[][] cors = Cors.actualResponseHeaders(ctx.request().getHeaders()); // TODO: Handle CORS in with a helper function instead of calling it in every single route
         if(Accepts.wantsJson(ctx.request().getHeaders())) {
-          // Map<String,Object> json = java.util.Map.of("message", msg);
-          var json = Json.createResponse("message", name);
-          HttpResponses.writeJson(out, 200, "OK", json, keepAlive, null);
+          var json = Json.createResponse("message", msg);
+          System.out.println("in GET method JSON msg: " + msg);
+          HttpResponses.writeJson(out, 200, "OK", json, keepAlive, cors);
         }
         else{
-          HttpResponses.writeText(out, 200, "OK", msg + "\n", keepAlive);
+          HttpResponses.writeText(out, 200, "OK", msg + "\n", keepAlive,cors);
         }
       })
       .get("/users/:id", (ctx, out, keepAlive) -> {
         String id = ctx.pathVars("id"); // Already decoded
         var json = Json.createResponse("id", id);
-        
-        HttpResponses.writeJson(out, 200, "OK", json, keepAlive, null);
+        String[][] cors = Cors.actualResponseHeaders(ctx.request().getHeaders());
+        HttpResponses.writeJson(out, 200, "OK", json, keepAlive, cors);
       })
       .post("/echo", (ctx, out, keepAlive) -> {
         String ct = ctx.request().getHeaders().first("content-type", "application/octet-stream");
+        String[][] cors = Cors.actualResponseHeaders(ctx.request().getHeaders());
+
         if(Accepts.wantsJson(ctx.request().getHeaders()) && ct.contains("application/json")){
           var node = Json.mapper.readTree(ctx.request().getBody());
-          HttpResponses.writeJson(out, 200, "OK", node, keepAlive, null);
+          HttpResponses.writeJson(out, 200, "OK", node, keepAlive, cors);
         } 
         else{
-          HttpResponses.writeRaw(out, 200, "OK", ct, ctx.request().getBody(), keepAlive);
+          HttpResponses.writeRaw(out, 200, "OK", ct, ctx.request().getBody(), keepAlive); // TODO: Add Extra headers to Raw
         }
       }).options("*", (ctx, out, keepAlive) -> {
         // Advertise what you generally support
         String allow = "GET,HEAD,POST,OPTIONS";
-        HttpResponses.writeText(out, 204, "No Content", "", keepAlive, new String[][]{{"Allow",allow}});
+        String[][] cors = Cors.actualResponseHeaders(ctx.request().getHeaders());
+
+        // Combine Allow header with CORS headers
+        String[][] allHeaders = new String[cors.length + 1][2];
+        allHeaders[0] = new String[]{"Allow", allow};
+        HttpResponses.writeText(out, 204, "No Content", "", keepAlive, allHeaders);
     });
   } 
 }
 
 /*
- * Step 11 - Json handling
+ * Step 12 - CORS
  * The server returns JSON as defualt now only in /hello endpoint has a text response
  * 
  * To Test json retun:

@@ -21,6 +21,9 @@ public final class HttpErrorHandler {
         System.err.println("[DEBUG] Socket closed, skipping error response");
         return;
       }
+      // TODO: Handle Adding CORS 
+      // String[][] cors = Cors.actualResponseHeaders(request.getHeaders());
+
       var m = RequestMetrics.get();
       if(m.prefersJson){
         HttpResponses.writeJson(client.getOutputStream(), status, reason, new ErrorEnvelope(status, message, m.requestId), false, extraHeaders);
