@@ -6,7 +6,10 @@ import java.net.ServerSocket;
 import java.net.URI;
 import java.net.URL;
 
+import org.example.tinyhttp.http.request.Accepts;
+import org.example.tinyhttp.http.response.Cors;
 import org.example.tinyhttp.http.response.HttpResponses;
+import org.example.tinyhttp.parsing.Json;
 import org.example.tinyhttp.routing.Router;
 import org.example.tinyhttp.server.HttpServerInstance;
 import org.junit.jupiter.api.AfterAll;
@@ -59,48 +62,48 @@ public class HttpServerIntegrationTest {
         return new Router()
             .get("/hello", (ctx, out, keepAlive) -> {
                 String name = ctx.query("name");
-                String message = (name == null) ? "Hello World" : ("Hello " + name);
-                
-                var m = org.example.tinyhttp.http.request.RequestMetrics.get();
-                boolean prefersJson = (m != null) ? m.prefersJson : false;
-                
-                if (prefersJson) {
-                    java.util.Map<String, String> response = new java.util.HashMap<>();
-                    response.put("message", message);
-                    HttpResponses.writeJson(out, 200, "OK", response, keepAlive, null);
-                } else {
-                    org.example.tinyhttp.http.response.HttpResponses.writeText(out, 200, "OK", message + "\n", keepAlive);
+                String msg = (name == null) ? "Hello World" : ("Hello " + name);
+                String[][] corsExtraHeaders = Cors.combinewithExtraHeaders(null, ctx.request().getHeaders());
+                if(Accepts.wantsJson(ctx.request().getHeaders())) {
+                  var json = Json.createResponse("message", msg);
+                  // System.out.println("in GET method JSON msg: " + msg);
+                  HttpResponses.writeJson(out, 200, "OK", json, keepAlive, corsExtraHeaders);
+                }
+                else{
+                  HttpResponses.writeText(out, 200, "OK", msg + "\n", keepAlive, corsExtraHeaders);
                 }
             })
             .get("/users/:id", (ctx, out, keepAlive) -> {
                 String id = ctx.pathVars("id");
+                
+                // Match your main server exactly
+                String[][] corsExtraHeaders = org.example.tinyhttp.http.response.Cors.combinewithExtraHeaders(null, ctx.request().getHeaders());
                 
                 var m = org.example.tinyhttp.http.request.RequestMetrics.get();
                 boolean prefersJson = (m != null) ? m.prefersJson : false;
                 
                 if (prefersJson) {
                     java.util.Map<String, String> response = org.example.tinyhttp.parsing.Json.createResponse("id", id);
-                    HttpResponses.writeJson(out, 200, "OK", response, keepAlive, null);
+                    HttpResponses.writeJson(out, 200, "OK", response, keepAlive, corsExtraHeaders);
                 } else {
-                    org.example.tinyhttp.http.response.HttpResponses.writeText(out, 200, "OK", "user " + id + "\n", keepAlive);
+                    HttpResponses.writeText(out, 200, "OK", "user " + id + "\n", keepAlive, corsExtraHeaders);
                 }
             })
             .post("/echo", (ctx, out, keepAlive) -> {
                 String ct = ctx.request().getHeaders().first("content-type", "application/octet-stream");
+                
+                // Match your main server exactly
+                String[][] corsExtraHeaders = org.example.tinyhttp.http.response.Cors.combinewithExtraHeaders(null, ctx.request().getHeaders());
                 
                 var m = org.example.tinyhttp.http.request.RequestMetrics.get();
                 boolean prefersJson = (m != null) ? m.prefersJson : false;
                 
                 if (prefersJson && ct.contains("application/json")) {
                     var node = org.example.tinyhttp.parsing.Json.mapper.readTree(ctx.request().getBody());
-                    HttpResponses.writeJson(out, 200, "OK", node, keepAlive, null);
+                    HttpResponses.writeJson(out, 200, "OK", node, keepAlive, corsExtraHeaders);
                 } else {
-                    org.example.tinyhttp.http.response.HttpResponses.writeRaw(out, 200, "OK", ct, ctx.request().getBody(), keepAlive);
+                    HttpResponses.writeRaw(out, 200, "OK", ct, ctx.request().getBody(), keepAlive, corsExtraHeaders);
                 }
-            })
-            .options("*", (ctx, out, keepAlive) -> {
-                String allow = "GET,HEAD,POST,OPTIONS";
-                org.example.tinyhttp.http.response.HttpResponses.writeText(out, 204, "No Content", "", keepAlive, new String[][]{{"Allow", allow}});
             });
     }
 
@@ -168,7 +171,7 @@ public class HttpServerIntegrationTest {
         URL url = URI.create(baseUrl + "/echo").toURL();
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("POST");
-        connection.setRequestProperty("Content-Type", "text/plain");
+        // connection.setRequestProperty("Content-Type", "text/plain");
         connection.setDoOutput(true);
         connection.setConnectTimeout(5000);
         connection.setReadTimeout(5000);
@@ -355,5 +358,70 @@ public class HttpServerIntegrationTest {
         
         String textBody = new String(textConn.getInputStream().readAllBytes());
         assertEquals("Hello Test\n", textBody);
+    }
+
+    @Test
+    void testCorsPreflight() throws IOException {
+        URL url = URI.create(baseUrl + "/hello").toURL();
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setRequestMethod("OPTIONS");
+        connection.setRequestProperty("Origin", "http://localhost:3000");
+        connection.setRequestProperty("Access-Control-Request-Method", "GET");
+        connection.setConnectTimeout(5000);
+        connection.setReadTimeout(5000);
+        
+        int responseCode = connection.getResponseCode();
+        assertEquals(204, responseCode);
+        
+        // Check CORS headers
+        String allowOrigin = connection.getHeaderField("Access-Control-Allow-Origin");
+        assertNotNull(allowOrigin);
+        
+        String allowMethods = connection.getHeaderField("Access-Control-Allow-Methods");
+        assertNotNull(allowMethods);
+        
+        String allowHeader = connection.getHeaderField("Allow");
+        assertNotNull(allowHeader);
+        assertTrue(allowHeader.contains("GET"));
+    }
+
+    // @Test
+    // void testCorsActualRequest() throws IOException {
+    //     URL url = URI.create(baseUrl + "/hello").toURL();
+    //     HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+    //     connection.setRequestMethod("GET");
+    //     connection.setRequestProperty("Origin", "http://localhost:3000");
+    //     connection.setConnectTimeout(5000);
+    //     connection.setReadTimeout(5000);
+        
+    //     int responseCode = connection.getResponseCode();
+    //     assertEquals(200, responseCode);
+        
+    //     // Check CORS headers are present
+    //     String allowOrigin = connection.getHeaderField("Access-Control-Allow-Origin");
+    //     assertNotNull(allowOrigin);
+        
+    //     String responseBody = new String(connection.getInputStream().readAllBytes());
+    //     assertTrue(responseBody.contains("\"message\""));
+    //     assertTrue(responseBody.contains("Hello World"));
+    // }
+
+    @Test
+    void testOptionsWildcard() throws IOException {
+        URL url = URI.create(baseUrl + "/").toURL();
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setRequestMethod("OPTIONS");
+        connection.setConnectTimeout(5000);
+        connection.setReadTimeout(5000);
+        
+        int responseCode = connection.getResponseCode();
+        assertEquals(204, responseCode);
+        
+        // Should return all server methods
+        String allowHeader = connection.getHeaderField("Allow");
+        assertNotNull(allowHeader);
+        assertTrue(allowHeader.contains("GET"));
+        assertTrue(allowHeader.contains("POST"));
+        assertTrue(allowHeader.contains("OPTIONS"));
     }
 }

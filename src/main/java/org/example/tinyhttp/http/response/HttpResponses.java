@@ -37,18 +37,18 @@ public final class HttpResponses {
       .append("Content-Type: text/plain; charset=utf-8\r\n")
       .append("Content-Length: ").append(body.length).append("\r\n");
 
-      var m = RequestMetrics.get();
-      if(m != null && m.requestId != null){
-        sb.append("X-REQUEST-ID: ").append(m.requestId).append("\r\n");
-      }
+    var m = RequestMetrics.get();
+    if(m != null && m.requestId != null){
+      sb.append("X-REQUEST-ID: ").append(m.requestId).append("\r\n");
+    }
 
-      if(extraHeaders != null){
-        for(String[] h : extraHeaders){
-          if(h != null && h.length == 2 && h[0] != null){
-            sb.append(h[0]).append(": ").append(h[1] == null ? "" : h[1]).append("\r\n");
-          }
+    if(extraHeaders != null){
+      for(String[] h : extraHeaders){
+        if(h != null && h.length == 2 && h[0] != null){
+          sb.append(h[0]).append(": ").append(h[1] == null ? "" : h[1]).append("\r\n");
         }
       }
+    }
 
     if(keepAlive){
       sb.append("Connection: keep-alive\r\n")
@@ -65,7 +65,7 @@ public final class HttpResponses {
   }
 
   public static void writeRaw(OutputStream out, int status, String reason, String contentType, byte[] body,
-    boolean  keepAlive) throws IOException {
+    boolean  keepAlive, String[][] extraHeaders) throws IOException {
 
     if(body == null) body = new byte[0];
 
@@ -76,10 +76,18 @@ public final class HttpResponses {
       .append("Content-Type: ").append(contentType).append("\r\n")
       .append("Content-Length: ").append(body.length).append("\r\n");
 
-      var m = RequestMetrics.get();
-      if(m != null && m.requestId != null){
-        sb.append("X-REQUEST-ID: ").append(m.requestId).append("\r\n");
+    var m = RequestMetrics.get();
+    if(m != null && m.requestId != null){
+      sb.append("X-REQUEST-ID: ").append(m.requestId).append("\r\n");
+    }
+    
+    if(extraHeaders != null){
+      for(String[] h : extraHeaders){
+        if(h != null && h.length == 2 && h[0] != null){
+          sb.append(h[0]).append(": ").append(h[1] == null ? "" : h[1]).append("\r\n");
+        }
       }
+    }
 
     if(keepAlive){
       sb.append("Connection: keep-alive\r\n")

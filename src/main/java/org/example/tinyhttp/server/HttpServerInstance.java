@@ -7,6 +7,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
@@ -17,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 import org.example.tinyhttp.context.RequestContext;
 import org.example.tinyhttp.http.HttpExceptions;
 import org.example.tinyhttp.http.request.Accepts;
+import org.example.tinyhttp.http.request.HttpHeaders;
 import org.example.tinyhttp.http.request.HttpRequest;
 import org.example.tinyhttp.http.request.RequestMetrics;
 import org.example.tinyhttp.http.response.Cors;
@@ -157,6 +159,7 @@ public class HttpServerInstance {
 
           try {
             HttpRequest request = HttpRequest.parse(bufferedIn);
+            
             // CORS preflight?
             if(Cors.isCorsPreflight(request.getMethod(), request.getHeaders())){
               System.out.println("In CORS Preflight check");
@@ -164,6 +167,7 @@ public class HttpServerInstance {
               // 204 No Content, Content-Lenght: 0
               keepAlive = true;
               HttpResponses.writeText(out, 204, "No Content", "", keepAlive, h);
+              // handleOptionsRequest(url, out, keepAlive, headers);
               continue;
             }
 
@@ -213,7 +217,7 @@ public class HttpServerInstance {
               // --- route match ---
               // If the method is Options we dont need to look at anything else
               if("OPTIONS".equals(request.getMethod())){
-                handleOptionsRequest(url, out, keepAlive);
+                handleOptionsRequest(url, out, keepAlive, request.getHeaders());
                 continue;
               }
               var match = router.find(request.getMethod(), url.path());
@@ -262,13 +266,26 @@ public class HttpServerInstance {
       }
   }
 
-  private void handleOptionsRequest(Url url, OutputStream out, boolean keepAlive) throws IOException {
-    var allowed = router.allowedForPath(url.path());
+  private void handleOptionsRequest(Url url, OutputStream out, boolean keepAlive, HttpHeaders headers) throws IOException {
+    Set<String> allowed;
+    if("*".equals(url.path()) || "/".equals(url.path()) || url.path().isEmpty()){
+      allowed = router.getAllServerMethods();
+    } else {
+      allowed = router.allowedForPath(url.path());
+    }
+    // var allowed = router.allowedForPath(url.path());
     if(!allowed.isEmpty()){
-      String allowHeader = String.join(",", allowed);
-      HttpResponses.writeText(out, 204, "No Content", "", keepAlive, new String[][]{{"Allow",allowHeader}});
+        String allowHeader = String.join(",", allowed);
+        String[][] allowHeaders = {{"Allow", allowHeader}};
+        
+        // Add CORS support - you'll need to get the headers from the request
+        // This method needs access to the request headers
+        // String[][] corsHeaders = Cors.preflightHeaders(headers);
+        String[][] allHeaders = Cors.combinewithExtraHeaders(allowHeaders, headers, true);
+        
+        HttpResponses.writeText(out, 204, "No Content", "", keepAlive, allHeaders);
     } else{
-      HttpResponses.writeText(out, 404, "Not Found", "No route: " + url.path() + "\n", keepAlive);
+        HttpResponses.writeText(out, 404, "Not Found", "No route: " + url.path() + "\n", keepAlive);
     }
   }
 

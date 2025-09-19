@@ -42,9 +42,7 @@ public final class Cors {
 
     String allowOrigin = resolveAllowOrigin(origin);
     List<String[]> list = new ArrayList<>();
-    list.add(new String[]{"Vary", "Origin"});
-    list.add(new String[]{"Vary", "Access-Control-Request-Headers"});
-    list.add(new String[]{"Vary", "Access-Control-Request-Method"});
+    list.add(new String[]{"Vary", "Origin, Accept, Access-Control-Request-Headers, Access-Control-Request-Method"});
     list.add(new String[]{"Access-Control-Allow-Origin", allowOrigin});
     list.add(new String[]{"Access-Control-Allow-Methods", ALLOWED_METHODS_CSV});
     list.add(new String[]{"Access-Control-Max-Age", String.valueOf(MAX_AGE_SECONDS)});
@@ -70,7 +68,7 @@ public final class Cors {
 
     String allowOrigin = resolveAllowOrigin(origin);
     List<String[]> list = new ArrayList<>();
-    list.add(new String[]{"Vary", "Origin"});
+    list.add(new String[]{"Vary", "Origin, Accept"});
     list.add(new String[]{"Access-Control-Allow-Origin", allowOrigin});
     if(ALLOW_CREDENTIANLS) list.add(new String[]{"Access-Control-Allow-Credentials", "true"});
     return list.toArray(String[][]::new);
@@ -95,4 +93,30 @@ public final class Cors {
     }
     return out.toString();
   }
+
+
+  public static String[][] combinewithExtraHeaders(String[][] extraHeaders, HttpHeaders headers){
+    return combinewithExtraHeaders(extraHeaders, headers, false);
+  }
+
+  public static String[][] combinewithExtraHeaders(String[][] extraHeaders, HttpHeaders headers, boolean isPreflight){
+    String[][] corsHeaders = isPreflight ? preflightHeaders(headers) : actualResponseHeaders(headers);
+    
+    // Both present - combine them
+    if(corsHeaders != null && extraHeaders != null){
+        String[][] combined = new String[corsHeaders.length + extraHeaders.length][2];
+        System.arraycopy(corsHeaders, 0, combined, 0, corsHeaders.length);
+        System.arraycopy(extraHeaders, 0, combined, corsHeaders.length, extraHeaders.length);
+        return combined;
+    }
+    
+    // Only CORS present - return CORS
+    if(corsHeaders != null) return corsHeaders;
+    
+    // Only extra headers present - return extra headers
+    if(extraHeaders != null) return extraHeaders;
+    
+    // Neither present - return null
+    return null;
+}
 }

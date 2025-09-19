@@ -48,43 +48,50 @@ public final class HttpServer {
       .get("/hello", (ctx, out, keepAlive) -> {
         String name = ctx.query("name");
         String msg = (name == null) ? "Hello World" : ("Hello " + name);
-        String[][] cors = Cors.actualResponseHeaders(ctx.request().getHeaders()); // TODO: Handle CORS in with a helper function instead of calling it in every single route
+        String[][] corsExtraHeaders = Cors.combinewithExtraHeaders(null, ctx.request().getHeaders());
         if(Accepts.wantsJson(ctx.request().getHeaders())) {
           var json = Json.createResponse("message", msg);
-          System.out.println("in GET method JSON msg: " + msg);
-          HttpResponses.writeJson(out, 200, "OK", json, keepAlive, cors);
+          // System.out.println("in GET method JSON msg: " + msg);
+          HttpResponses.writeJson(out, 200, "OK", json, keepAlive, corsExtraHeaders);
         }
         else{
-          HttpResponses.writeText(out, 200, "OK", msg + "\n", keepAlive,cors);
+          HttpResponses.writeText(out, 200, "OK", msg + "\n", keepAlive, corsExtraHeaders);
         }
       })
       .get("/users/:id", (ctx, out, keepAlive) -> {
         String id = ctx.pathVars("id"); // Already decoded
         var json = Json.createResponse("id", id);
-        String[][] cors = Cors.actualResponseHeaders(ctx.request().getHeaders());
-        HttpResponses.writeJson(out, 200, "OK", json, keepAlive, cors);
+        // String[][] cors = Cors.actualResponseHeaders(ctx.request().getHeaders());
+        String[][] corsExtraHeaders = Cors.combinewithExtraHeaders(null, ctx.request().getHeaders());
+
+        HttpResponses.writeJson(out, 200, "OK", json, keepAlive, corsExtraHeaders);
       })
       .post("/echo", (ctx, out, keepAlive) -> {
         String ct = ctx.request().getHeaders().first("content-type", "application/octet-stream");
-        String[][] cors = Cors.actualResponseHeaders(ctx.request().getHeaders());
+        // String[][] cors = Cors.actualResponseHeaders(ctx.request().getHeaders());
+        String[][] corsExtraHeaders = Cors.combinewithExtraHeaders(null, ctx.request().getHeaders());
+
 
         if(Accepts.wantsJson(ctx.request().getHeaders()) && ct.contains("application/json")){
           var node = Json.mapper.readTree(ctx.request().getBody());
-          HttpResponses.writeJson(out, 200, "OK", node, keepAlive, cors);
+          HttpResponses.writeJson(out, 200, "OK", node, keepAlive, corsExtraHeaders);
         } 
         else{
-          HttpResponses.writeRaw(out, 200, "OK", ct, ctx.request().getBody(), keepAlive); // TODO: Add Extra headers to Raw
+          HttpResponses.writeRaw(out, 200, "OK", ct, ctx.request().getBody(), keepAlive, corsExtraHeaders); // TODO: Add Extra headers to Raw
         }
-      }).options("*", (ctx, out, keepAlive) -> {
-        // Advertise what you generally support
-        String allow = "GET,HEAD,POST,OPTIONS";
-        String[][] cors = Cors.actualResponseHeaders(ctx.request().getHeaders());
+      });
+      // .options("*", (ctx, out, keepAlive) -> {
+      //   // Advertise what you generally support
+      //   System.out.println("in the * OPTIONS for path: " + ctx.url().path());
 
-        // Combine Allow header with CORS headers
-        String[][] allHeaders = new String[cors.length + 1][2];
-        allHeaders[0] = new String[]{"Allow", allow};
-        HttpResponses.writeText(out, 204, "No Content", "", keepAlive, allHeaders);
-    });
+      //   var allowed = allowedForPath(ctx.url().path());
+
+      //   String allow = "GET,HEAD,POST,OPTIONS";
+      //   String[][] allowHeaders = {{"Allow", allow}};
+      //   String[][] corsExtraHeaders = Cors.combinewithExtraHeaders(allowHeaders, ctx.request().getHeaders(), true);
+
+      //   HttpResponses.writeText(out, 204, "No Content", "", keepAlive, corsExtraHeaders);
+      // });
   } 
 }
 

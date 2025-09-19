@@ -91,6 +91,18 @@ public final class Router {
     return allowed;
   }
 
+  public Set<String> getAllServerMethods(){
+    Set<String> allMethods = new LinkedHashSet<>();
+    for(Route r: routes){
+      if(!"*".equals(r.method)){
+        allMethods.add(r.method);
+      }
+    }
+    if(allMethods.contains("GET")) allMethods.add("HEAD");
+    allMethods.add("OPTIONS");
+    return allMethods;
+  }
+
   public static final class Match{
     public final RouteHandler handler;
     public final Map<String, String> pathVars;
@@ -99,6 +111,5 @@ public final class Router {
         this.handler = h;
         this.pathVars = pathVars;
     }
-    
   }
 }
