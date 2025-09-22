@@ -3,22 +3,36 @@
 [![codecov](https://codecov.io/gh/BurakPozut/tiny-http/branch/main/graph/badge.svg)](https://codecov.io/gh/BurakPozut/tiny-http)
 [![CI](https://github.com/BurakPozut/tiny-http/workflows/CI/badge.svg)](https://github.com/BurakPozut/tiny-http/actions)
 
-A lightweight, single-threaded HTTP server implementation in Java that demonstrates core networking concepts and HTTP protocol handling.
+A lightweight HTTP server implementation in Java with both a **pure Java core** and a **Spring Boot wrapper**. Demonstrates core networking concepts, HTTP protocol handling, and modern Java web development.
 
 ## ✨ Features
 
+### Core Server (`tiny-http-core`)
 - **Pure Java Implementation**: Built with standard Java networking APIs
-- **HTTP Protocol Support**: Handles basic HTTP requests and responses
-- **Resource Management**: Proper use of try-with-resources for socket cleanup
-- **Exception Handling**: Robust error handling with meaningful error messages
-- **Maven Build System**: Professional project structure with dependency management
+- **Multi-threaded**: Thread pool for handling concurrent requests
+- **HTTP Protocol Support**: Complete HTTP/1.1 request/response handling
+- **Routing System**: Flexible URL pattern matching with path variables
+- **JSON Support**: Built-in JSON parsing and response generation
+- **CORS Support**: Cross-origin resource sharing capabilities
+- **Request Tracking**: Unique request ID generation and logging
+- **Configuration**: Environment-based configuration system
+
+### Spring Boot Wrapper (`tiny-http-boot`)
+- **Spring Boot Integration**: Modern web framework wrapper
+- **REST Controllers**: Clean, annotation-based endpoint definitions
+- **Automatic JSON Serialization**: Records and DTOs with automatic conversion
+- **Filter Chain**: Request/response processing with custom filters
+- **Error Handling**: Global exception handling with structured error responses
+- **CORS Configuration**: Declarative CORS setup
 
 ## 🛠️ Technology Stack
 
 - **Language**: Java 21
 - **Build Tool**: Maven 3.9+
-- **Networking**: Java NIO and Socket APIs
-- **Testing**: JUnit for unit tests
+- **Core Server**: Pure Java (NIO, Sockets, Threading)
+- **Spring Boot**: 3.3.3
+- **Testing**: JUnit 5, Spring Boot Test
+- **JSON Processing**: Jackson
 
 ## 🚀 Quick Start
 
@@ -27,39 +41,73 @@ A lightweight, single-threaded HTTP server implementation in Java that demonstra
 - Java 21 or higher
 - Maven 3.9+
 
-### Running the Server
+### Running the Core Server
 
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/tiny-http.git
 cd tiny-http
 
-# Compile and run
-mvn compile exec:java
+# Run the core server
+mvn compile exec:java -pl tiny-http-core
 ```
 
-The server will start listening on `http://localhost:8080`
-
-### Testing the Server
-
-Open your browser and navigate to `http://localhost:8080` or use curl:
+### Running the Spring Boot Server
 
 ```bash
-curl http://localhost:8080
+# Run the Spring Boot version
+mvn spring-boot:run -pl tiny-http-boot
+```
+
+Both servers will start listening on `http://localhost:8080`
+
+### Testing the Servers
+
+```bash
+# Test core server
+curl -i 'http://localhost:8080/hello?name=World'
+curl -i 'http://localhost:8080/users/123'
+curl -i -X POST -H "Content-Type: application/json" -d '{"test":"data"}' 'http://localhost:8080/echo'
+
+# Test Spring Boot server (same endpoints)
+curl -i 'http://localhost:8080/hello?name=World'
+curl -i 'http://localhost:8080/users/123'
+curl -i -X POST -H "Content-Type: application/json" -d '{"test":"data"}' 'http://localhost:8080/echo'
 ```
 
 ## 📁 Project Structure
 
 ```
 tiny-http/
-├── src/
-│   ├── main/java/org/example/tinyhttp/
-│   │   └── HttpServer.java          # Main server implementation
-│   └── test/java/org/example/
-│       └── AppTest.java       # Unit tests
-├── pom.xml                    # Maven configuration
-└── README.md                  # This file
+├── tiny-http-core/                 # Pure Java HTTP server
+│   ├── src/main/java/org/example/tinyhttp/
+│   │   ├── config/                 # Configuration management
+│   │   ├── context/                # Request context
+│   │   ├── http/                   # HTTP request/response handling
+│   │   ├── logging/                # Access logging
+│   │   ├── parsing/                # JSON and URL parsing
+│   │   ├── routing/                # URL routing system
+│   │   ├── server/                 # Server implementation
+│   │   └── util/                   # Utility classes
+│   └── src/test/java/              # Core server tests
+├── tiny-http-boot/                 # Spring Boot wrapper
+│   ├── src/main/java/org/example/tinyboot/
+│   │   ├── config/                 # Spring configuration
+│   │   ├── dto/                    # Data transfer objects
+│   │   └── web/                    # REST controllers and filters
+│   └── src/test/java/              # Spring Boot tests
+└── pom.xml                         # Parent POM
 ```
+
+## 🌐 Available Endpoints
+
+Both servers provide the same API:
+
+- `GET /hello?name={name}` - Hello world with optional name parameter
+- `GET /users/{id}` - Get user by ID  
+- `POST /echo` - Echo back request body (JSON or raw)
+- `GET /health` - Server health check
+- `GET /debug/config` - Server configuration info
 
 ## 🔧 Key Implementation Details
 
@@ -82,11 +130,19 @@ tiny-http/
 
 This project demonstrates:
 
-- **Java Networking Fundamentals**: Understanding of sockets, ports, and client-server communication
-- **Resource Management**: Proper handling of system resources with try-with-resources
-- **Exception Handling**: Robust error handling in network applications
-- **HTTP Protocol Basics**: Understanding of HTTP request/response cycle
-- **Maven Project Structure**: Professional Java project organization
+### Core Server
+- **Java Networking**: Sockets, NIO, multi-threading
+- **HTTP Protocol**: Request parsing, response generation
+- **Resource Management**: Proper cleanup and exception handling
+- **Design Patterns**: Builder pattern, strategy pattern
+- **Configuration**: Environment-based settings
+
+### Spring Boot Integration
+- **Modern Web Development**: REST APIs, dependency injection
+- **Spring Boot Features**: Auto-configuration, starters
+- **Testing**: Integration and unit testing
+- **Filter Chain**: Request/response processing
+- **Error Handling**: Global exception management
 
 ## 🔮 Future Enhancements
 
