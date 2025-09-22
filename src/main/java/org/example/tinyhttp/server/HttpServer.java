@@ -1,7 +1,9 @@
 package org.example.tinyhttp.server;
 
 import java.io.IOException;
+import java.util.Map;
 
+import org.example.tinyhttp.config.Config;
 import org.example.tinyhttp.http.request.Accepts;
 import org.example.tinyhttp.http.response.Cors;
 import org.example.tinyhttp.http.response.HttpResponses;
@@ -11,17 +13,23 @@ import org.example.tinyhttp.routing.Router;
 
 
 public final class HttpServer {
-  private static final int PORT = 8080;
+  // private static final int PORT = 8080;
+  private static volatile long START_NANO;
+
 
   private HttpServer() {}
 
   public static void main(String[] args) {
-    System.out.println("[tiny-http] listening on http://localhost:" + PORT);
     Router router = createDefaultRouter();
-    HttpServerInstance server = new HttpServerInstance(PORT, router);
-       
+    Config config = Config.load(args);
+    HttpServerInstance server = new HttpServerInstance(config, router);
+    var cfg = org.example.tinyhttp.config.Config.load(args);
+    START_NANO = System.nanoTime();
+    
+    
     try {
       server.start();
+      System.out.println("[tiny-http] listening on http://localhost:" + cfg.port);
       
       // Add shutdown hook
       Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -79,6 +87,29 @@ public final class HttpServer {
         else{
           HttpResponses.writeRaw(out, 200, "OK", ct, ctx.request().getBody(), keepAlive, corsExtraHeaders); // TODO: Add Extra headers to Raw
         }
+      })
+      .get("/health",(ctx, out, keepAlive) -> {
+        var c = ctx.config();
+        long uptimeMs = Math.max(0, (System.nanoTime() - START_NANO) - 1_000_000);
+
+        var body = Map.of(
+          "status","up",
+          "uptimeMs", uptimeMs,
+          "port",c.port,
+          "workerThreads", c.workerThreads,
+          "queueCapacity", c.queueCapacity,
+          "keepAliveIdleTimeoutMs", c.keepAliveIdleTimeoutMs
+        );
+        HttpResponses.writeJson(out, 200, "OK", body, keepAlive, null);
+
+      })
+      .get("/debug/config", (ctx, out, ka) -> {
+        var c = ctx.config();
+        var body = java.util.Map.of(
+            "logFormat", c.logFormat,
+            "maxRequestsPerConn", c.maxRequestsPerConn
+        );
+        HttpResponses.writeJson(out, 200, "OK", body, ka, null);
       });
       // .options("*", (ctx, out, keepAlive) -> {
       //   // Advertise what you generally support

@@ -15,6 +15,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import org.example.tinyhttp.config.Config;
 import org.example.tinyhttp.context.RequestContext;
 import org.example.tinyhttp.http.HttpExceptions;
 import org.example.tinyhttp.http.request.Accepts;
@@ -32,35 +33,24 @@ import org.example.tinyhttp.routing.Router;
 import org.example.tinyhttp.util.Ids;
 
 public class HttpServerInstance {
-    private final int port;
-    private final Router router;
-    private volatile boolean running = false;
-    private ServerSocket serverSocket;
-    private ThreadPoolExecutor workerPool;
-    private Thread serverThread;
+  private final Router router;
+  private volatile boolean running = false;
+  private ServerSocket serverSocket;
+  private ThreadPoolExecutor workerPool;
+  private Thread serverThread;
+  private final Config config;
 
-    // Concurrency / socket tuning
-    private static final int ACCEPT_BACKLOG = 128;
-    private static final int WORKER_THREADS = Math.max(2, Runtime.getRuntime().availableProcessors());
-    private static final int QUEUE_CAPACITY = 256;
-    private static final int SOCKET_READ_TIMEOUT_MS = 10_000;
-    public static final int KEEP_ALIVE_IDLE_TIMEOUT_MS = 5000;
-    public static final int MAX_REQUESTS_PER_CONN = 100;
-    public static final int HEADER_READ_TIMEOUT_MS = 3000;
-
-    public HttpServerInstance(int port, Router router) {
-        this.port = port;
-        this.router = router;
-    }
-
-    // Add these methods after the constructor (around line 48)
+  public HttpServerInstance(Config config, Router router) {
+    this.config = config;
+    this.router = router; 
+  }
 
   public void start() throws IOException {
     if (running) {
       throw new IllegalStateException("Server is already running");
     }
 
-    serverSocket = new ServerSocket(port, ACCEPT_BACKLOG);
+    serverSocket = new ServerSocket(config.port, config.acceptBacklog);
     serverSocket.setReuseAddress(true);
     workerPool = newWorkerPool();
     running = true;
@@ -69,7 +59,7 @@ public class HttpServerInstance {
       while (running) {
         try {
           Socket client = serverSocket.accept();
-          client.setSoTimeout(SOCKET_READ_TIMEOUT_MS);
+          client.setSoTimeout(config.socketReadTimeoutMs);
           try {
             workerPool.execute(() -> handle(client));
           } catch (RejectedExecutionException rex) {
@@ -121,8 +111,8 @@ public class HttpServerInstance {
     }
   }
 
-    private static ThreadPoolExecutor newWorkerPool(){
-      var queue = new ArrayBlockingQueue<Runnable>(QUEUE_CAPACITY);
+    private ThreadPoolExecutor newWorkerPool(){
+      var queue = new ArrayBlockingQueue<Runnable>(config.queueCapacity);
       var tf = new ThreadFactory() {
         private final ThreadFactory def = Executors.defaultThreadFactory();
         private int n = 0;
@@ -133,7 +123,7 @@ public class HttpServerInstance {
           return t;
         }
       };
-      return new ThreadPoolExecutor(WORKER_THREADS, WORKER_THREADS, 0L, 
+      return new ThreadPoolExecutor(config.workerThreads, config.workerThreads, 0L, 
       TimeUnit.MILLISECONDS, queue, tf, new ThreadPoolExecutor.AbortPolicy());
   }
 
@@ -148,13 +138,13 @@ public class HttpServerInstance {
 
         String requestId = Ids.requestId();
         // client.setSoTimeout(KEEP_ALIVE_IDLE_TIMEOUT_MS);
-        client.setSoTimeout(HEADER_READ_TIMEOUT_MS);
+        client.setSoTimeout(config.headerReadTimeoutMs);
 
         long statNs = System.nanoTime();
         RequestMetrics.set(new RequestMetrics(requestId, "?", "?", 
         client.getInetAddress().getHostAddress() + ":" + client.getPort(), statNs));
 
-        while(keepAlive && served < MAX_REQUESTS_PER_CONN){
+        while(keepAlive && served < config.maxRequestsPerConn){
           keepAlive = false; // Start pessimistic, set to true only on success
 
           try {
@@ -184,7 +174,7 @@ public class HttpServerInstance {
               m.prefersJson = accept;
             }
             
-            client.setSoTimeout(KEEP_ALIVE_IDLE_TIMEOUT_MS);
+            client.setSoTimeout(config.keepAliveIdleTimeoutMs);
             served++;
 
             // Expect: 100-continue (ack before reading body if your parser defers body)
@@ -198,7 +188,7 @@ public class HttpServerInstance {
             boolean clientWantsClose = connHeader != null && connHeader.equalsIgnoreCase("close");
             boolean serverWantsClose = false;
 
-            boolean keepThisResponseAlive = !clientWantsClose && !serverWantsClose && (served < MAX_REQUESTS_PER_CONN);
+            boolean keepThisResponseAlive = !clientWantsClose && !serverWantsClose && (served < config.maxRequestsPerConn);
 
             try {
               // --- build Url from target ---
@@ -222,7 +212,7 @@ public class HttpServerInstance {
               }
               var match = router.find(request.getMethod(), url.path());
               if (match.isPresent()) {
-                RequestContext ctx = new RequestContext(request, url, match.get().pathVars);
+                RequestContext ctx = new RequestContext(request, url, match.get().pathVars, config);
                 if ("HEAD".equals(request.getMethod())) {
                   ResponseMetaData meta = match.get().handler.getMetaData(ctx);
                   HttpResponses.writeHEAD(out, 200, "OK", meta.contentType, meta.contentLength, keepThisResponseAlive);
