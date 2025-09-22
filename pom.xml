@@ -14,5 +14,22 @@
     <module>tiny-http-boot</module>
   </modules>
 
-  <!-- optional shared plugin mgmt/versions could live here -->
+  <properties>
+    <maven.compiler.source>21</maven.compiler.source>
+    <maven.compiler.target>21</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <jacoco.version>0.8.11</jacoco.version>
+  </properties>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.jacoco</groupId>
+          <artifactId>jacoco-maven-plugin</artifactId>
+          <version>${jacoco.version}</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
 </project>
