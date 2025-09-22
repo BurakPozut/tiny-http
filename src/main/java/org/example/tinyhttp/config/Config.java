@@ -81,4 +81,9 @@ public final class Config {
     """);
     System.exit(0);
   }
+
+  public static Config forTesting(int port) {
+    // int cpu = Math.max(2, Runtime.getRuntime().availableProcessors());
+    return new Config(port, 128, 2, 256, 3000, 5000, 10000, 100, 10, "plain");
+}
 }
